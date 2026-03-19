@@ -1,0 +1,11 @@
+[Unit]
+Description=webhooker worker
+
+[Service]
+Type=oneshot
+User=webhooker
+Group=webhooker
+WorkingDirectory=/opt/webhooker
+Environment=GITHUB_TOKEN=replace_me
+Environment=GITHUB_WEBHOOK_SECRET=replace_me
+ExecStart=/opt/webhooker/.venv/bin/webhooker-worker --config-dir /etc/webhooker/projects

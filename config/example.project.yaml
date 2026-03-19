@@ -1,0 +1,57 @@
+project_id: listerine-staging
+
+github:
+  owner: your-github-user-or-org
+  repo: listerine
+  token_env: GITHUB_TOKEN
+  webhook_secret_env: GITHUB_WEBHOOK_SECRET
+  required_event_types:
+    - pull_request
+    - ping
+
+deployment:
+  compose_file: /opt/listerine/deploy/compose.preview.yml
+  compose_bin: docker
+  working_directory: /opt/listerine/deploy
+  project_name_prefix: listerine-pr-
+  preview_base_domain: pr.staging.listerine.malaber.de
+  hostname_template: "{pr}.pr.staging.listerine.malaber.de"
+
+image:
+  registry: ghcr.io
+  repository: your-github-user-or-org/listerine
+  tag_template: "pr-{pr}-{sha7}"
+
+preview:
+  base_dir: /srv/webhooker/previews/listerine
+  reset_data_on_redeploy: true
+  data_dir_template: "/srv/webhooker/previews/listerine/pr-{pr}"
+  sqlite_path_template: "/srv/webhooker/previews/listerine/pr-{pr}/app.db"
+  seed_command:
+    - docker
+    - compose
+    - -p
+    - "{compose_project}"
+    - -f
+    - "/opt/listerine/deploy/compose.preview.yml"
+    - exec
+    - -T
+    - app
+    - python
+    - -m
+    - listerine.seed_demo_data
+
+reconcile:
+  poll_interval_seconds: 600
+  cleanup_closed_prs: true
+  redeploy_on_sha_change: true
+
+traefik:
+  enable_labels: true
+  certresolver: letsencrypt
+
+state:
+  state_file: /var/lib/webhooker/state/listerine-staging.json
+
+wake:
+  wake_file: /var/lib/webhooker/wake/listerine-staging
