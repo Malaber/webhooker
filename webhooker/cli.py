@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+import uvicorn
+
 from webhooker.api import create_app
 from webhooker.config import load_project_configs
 from webhooker.logging_utils import configure_logging
@@ -11,11 +13,6 @@ from webhooker.worker import reconcile_project
 
 
 def run_api() -> None:
-    try:
-        import uvicorn
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("uvicorn is required to run webhooker-api") from exc
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-dir", required=True)
     parser.add_argument("--host", default="127.0.0.1")

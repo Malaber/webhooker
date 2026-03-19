@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from webhooker.models import DeployedPreview, ProjectState
 from webhooker.state import load_state, save_state
 
 
-def test_empty_state_file_creates_default_state(tmp_path) -> None:
+def test_empty_state_file_creates_default_state(tmp_path: Path) -> None:
     state = load_state(str(tmp_path / "missing.json"), project_id="demo")
 
     assert state.project_id == "demo"
     assert state.deployed == {}
 
 
-def test_saved_state_reloads_correctly(tmp_path) -> None:
+def test_saved_state_reloads_correctly(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     original = ProjectState(
         project_id="demo",

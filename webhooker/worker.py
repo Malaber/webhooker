@@ -11,18 +11,21 @@ from webhooker.wake import clear_wake_file
 
 logger = logging.getLogger(__name__)
 
+GitHubClientFactory = Callable[[ProjectConfig], GitHubClient]
+DeployerFactory = Callable[[ProjectConfig], Deployer]
+
 
 
 def reconcile_project(
     config: ProjectConfig,
-    github_client_factory: Callable[[ProjectConfig], GitHubClient] = GitHubClient,
-    deployer_factory: Callable[[ProjectConfig], Deployer] = Deployer,
+    github_client_factory: GitHubClientFactory = GitHubClient,
+    deployer_factory: DeployerFactory = Deployer,
 ) -> None:
     state: ProjectState = load_state(config.state.state_file, config.project_id)
-    gh = github_client_factory(config)
+    github_client = github_client_factory(config)
     deployer = deployer_factory(config)
 
-    open_prs = gh.list_open_pull_requests()
+    open_prs = github_client.list_open_pull_requests()
     open_by_number = {pr.number: pr for pr in open_prs}
 
     desired_numbers = set(open_by_number)
@@ -32,7 +35,7 @@ def reconcile_project(
         stale_numbers = deployed_numbers - desired_numbers
         for pr_number in sorted(stale_numbers):
             deployed = state.deployed[pr_number]
-            logger.info("Cleaning up closed preview", extra={"project_id": config.project_id, "pr": pr_number})
+            logger.info("Cleaning stale preview project_id=%s pr=%s", config.project_id, pr_number)
             deployer.remove_preview(deployed)
             del state.deployed[pr_number]
 
@@ -41,12 +44,16 @@ def reconcile_project(
         current = state.deployed.get(pr_number)
 
         if current is None:
-            logger.info("Deploying new preview", extra={"project_id": config.project_id, "pr": pr_number})
+            logger.info("Deploying new preview project_id=%s pr=%s", config.project_id, pr_number)
             state.deployed[pr_number] = deployer.deploy_preview(pr)
             continue
 
         if config.reconcile.redeploy_on_sha_change and current.sha != pr.head_sha:
-            logger.info("Redeploying preview after SHA change", extra={"project_id": config.project_id, "pr": pr_number})
+            logger.info(
+                "Redeploying preview for SHA change project_id=%s pr=%s",
+                config.project_id,
+                pr_number,
+            )
             deployer.remove_preview(current)
             state.deployed[pr_number] = deployer.deploy_preview(pr)
 

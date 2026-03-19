@@ -1,16 +1,17 @@
 # webhooker
 
-`webhooker` is a reusable Python service that manages pull-request preview environments for Docker Compose applications. It keeps a small public-facing webhook separate from the privileged deployment worker so that GitHub webhooks can only wake the reconciler, never instruct it what to deploy.
+`webhooker` is a reusable Python 3.14 service that manages per-pull-request preview deployments for Docker Compose applications. It splits responsibilities into a minimal public webhook API and a privileged worker so incoming requests can only wake reconciliation, never control what gets deployed.
 
 ## What webhooker does
 
 - Loads one or more project definitions from YAML.
-- Polls GitHub for open pull requests per configured project.
-- Computes the expected preview image tag for each PR.
-- Reconciles local Docker Compose deployments so open PRs are deployed and closed PRs are removed.
+- Polls GitHub for open pull requests for each configured project.
+- Computes the desired image tag for every PR from trusted configuration and GitHub state.
+- Reconciles local preview deployments with `docker compose` using one Compose project name per PR.
+- Removes stale deployments when PRs close or merge.
 - Persists deployment state locally.
-- Supports seeded SQLite preview data that can be reset on redeploy.
-- Exposes a tiny FastAPI wake endpoint that only validates GitHub signatures and touches a wake file.
+- Supports seeded SQLite preview environments with fresh data on redeploy.
+- Exposes a tiny FastAPI wake endpoint that validates GitHub HMAC signatures and only touches a wake file.
 
 ## Architecture
 
@@ -22,98 +23,149 @@ webhooker-api (FastAPI)
     - validate X-Hub-Signature-256
     - verify event type and repository
     - touch wake file
-    - return 202
+    - return 202 Accepted
 
-systemd timer / manual start
+systemd timer / manual execution
     |
     v
 webhooker-worker
-    - load project config(s)
+    - load project configs
     - query GitHub API for open PRs
-    - compute desired previews
-    - docker compose up/down per PR
+    - compute desired state
+    - run docker compose up/down per PR
     - reset preview data and seed SQLite if configured
-    - persist state file
+    - persist state
 ```
 
 ## Repository layout
 
 ```text
 webhooker/
+├── AGENTS.md
+├── Dockerfile
 ├── pyproject.toml
 ├── README.md
 ├── webhooker/
+│   ├── __init__.py
+│   ├── api.py
+│   ├── cli.py
+│   ├── config.py
+│   ├── deployer.py
+│   ├── github_client.py
+│   ├── logging_utils.py
+│   ├── models.py
+│   ├── paths.py
+│   ├── security.py
+│   ├── state.py
+│   ├── wake.py
+│   └── worker.py
 ├── config/
+│   └── example.project.yaml
 ├── systemd/
+│   ├── webhooker-api.service
+│   ├── webhooker-worker.service
+│   └── webhooker-worker.timer
 ├── scripts/
-└── tests/
+│   └── bootstrap.sh
+├── tests/
+└── .github/workflows/ci.yml
 ```
 
 ## Configuration reference
 
-Each target application gets one YAML file under a config directory passed to the API and worker.
+Each application managed by `webhooker` gets one YAML project file.
 
-Important sections:
+- `project_id`: stable routing identifier used in `/github/<project_id>/wake`.
+- `github`: repository owner/name, token env var, webhook secret env var, and allowed event types.
+- `deployment`: compose file path, working directory, compose binary, project name prefix, and hostname template.
+- `image`: registry/repository and tag template, for example `pr-{pr}-{sha7}`.
+- `preview`: per-PR preview base directory, SQLite path template, reset behavior, and an optional seed command.
+- `reconcile`: worker polling and redeploy behavior.
+- `traefik`: optional router/service label inputs and cert resolver.
+- `state`: JSON file path for persisted deployment state.
+- `wake`: wake file path touched by the webhook.
 
-- `github`: repository identity, token env var, webhook secret env var, and allowed event types.
-- `deployment`: static compose file path, compose binary, project name prefix, and hostname template.
-- `image`: registry/repository and tag template, such as `pr-{pr}-{sha7}`.
-- `preview`: per-PR data directory paths and an optional seed command.
-- `reconcile`: polling interval, closed-PR cleanup, and SHA-based redeploy behavior.
-- `state`: JSON state file path.
-- `wake`: wake file path used by the webhook.
-
-See `config/example.project.yaml` for a complete example.
+See `config/example.project.yaml` for the full example.
 
 ## Target app compose file requirements
 
-The target application owns its static preview compose file. `webhooker` reuses that file and relies on a unique Docker Compose project name per PR deployment.
+The target application owns its static preview compose file. `webhooker` reuses that file and supplies runtime environment variables.
 
-The compose file should read these environment variables:
+Expected variables:
 
 - `APP_IMAGE`
 - `APP_HOSTNAME`
 - `APP_DATA_DIR`
+- `APP_SQLITE_PATH`
 - `TRAEFIK_ROUTER`
 - `TRAEFIK_SERVICE`
 - `TRAEFIK_CERTRESOLVER`
 
-A preview compose file can then be deployed repeatedly by varying the compose project name, for example `listerine-pr-12` and `listerine-pr-18`.
+Because Docker Compose isolates deployments by project name, the same preview compose file can be launched repeatedly as `listerine-pr-12`, `listerine-pr-18`, and so on.
 
-## Setup
+## Security model
 
-### 1. Install
+### What the webhook is allowed to do
+
+- Verify `X-Hub-Signature-256`.
+- Validate the configured `project_id`.
+- Filter allowed event types.
+- Verify the repository identity.
+- Touch a wake file.
+
+### What the webhook is not allowed to do
+
+- Accept an image URL.
+- Accept a compose file path.
+- Accept a command to execute.
+- Accept a PR number to deploy.
+- Talk to Docker directly.
+
+### What the worker does
+
+- Talks to the GitHub API.
+- Computes desired preview state.
+- Runs `docker compose`.
+- Removes stale previews.
+- Resets preview data and optionally seeds SQLite.
+- Persists deployment state.
+
+## Local development
+
+### Install
 
 ```bash
-python3 -m venv .venv
+python3.14 -m venv .venv
 . .venv/bin/activate
-pip install -e .[dev]
+python -m pip install --upgrade pip
+python -m pip install -e .[dev]
 ```
 
-Or use the bootstrap helper on the target host:
+### Run tests and checks
 
 ```bash
-sudo ./scripts/bootstrap.sh
+python -m ruff check .
+python -m mypy webhooker
+python -m pytest
 ```
 
-### 2. Create project configs
+## Running the services
 
-Copy `config/example.project.yaml` to your config directory and fill in repository-specific values.
-
-### 3. Export secrets
-
-Provide the GitHub token and webhook secret via environment variables referenced by the config file.
-
-Example:
+### API
 
 ```bash
-export GITHUB_TOKEN=ghp_redacted
-export GITHUB_WEBHOOK_SECRET=replace_me
+webhooker-api --config-dir /etc/webhooker/projects --host 127.0.0.1 --port 9100
 ```
 
-### 4. Systemd setup
+### Worker
 
-Install the provided units from `systemd/` and then enable the API service and worker timer:
+```bash
+webhooker-worker --config-dir /etc/webhooker/projects
+```
+
+## Systemd setup
+
+Use the files in `systemd/` and enable the timer-driven worker:
 
 ```bash
 sudo systemctl daemon-reload
@@ -121,15 +173,15 @@ sudo systemctl enable --now webhooker-api.service
 sudo systemctl enable --now webhooker-worker.timer
 ```
 
-You can also run the worker manually:
+You can manually trigger reconciliation any time with:
 
 ```bash
-webhooker-worker --config-dir /etc/webhooker/projects
+sudo systemctl start webhooker-worker.service
 ```
 
 ## GitHub webhook setup
 
-Configure GitHub to send the webhook to the wake endpoint:
+Configure the webhook URL like this:
 
 ```text
 https://webhooker.example.com/github/<project_id>/wake
@@ -137,69 +189,44 @@ https://webhooker.example.com/github/<project_id>/wake
 
 Recommended settings:
 
-- Content type: `application/json`
-- Secret: same value as the environment variable referenced by `webhook_secret_env`
-- Events: `Pull requests` and optionally `Ping`
+- content type: `application/json`
+- secret: same value referenced by `webhook_secret_env`
+- events: `Pull requests` and optionally `Ping`
 
-The webhook endpoint validates `X-Hub-Signature-256`, rejects unknown projects, rejects repository mismatches, and ignores unexpected event types.
+The API returns `202 Accepted` for valid wake requests and never deploys directly.
 
 ## GHCR token setup
 
-If preview images are stored in GHCR, provide a token that can read the package and query the repository metadata. Keep the token in environment or a secret manager, not in YAML files.
+If preview images are stored in GHCR, provide a token with package-read permissions via the environment variable named in the project config.
 
-## Reconciliation flow
+## Docker image
 
-For each configured project, the worker:
+A production image is provided by the repository `Dockerfile` and targets Python 3.14 on `python:3.14-slim`.
 
-1. Loads the local state file.
-2. Queries GitHub for open pull requests.
-3. Removes stale deployments for PRs that are no longer open.
-4. Deploys previews for newly opened PRs.
-5. Redeploys previews when the tracked PR head SHA changes.
-6. Saves the updated state file.
-7. Clears the wake file.
+Example local build:
 
-## Security model
+```bash
+docker build -t webhooker:local .
+```
 
-### Webhook allowed actions
+## CI and release flow
 
-- Verify GitHub HMAC signatures.
-- Check project ID, repository, and event type.
-- Touch a wake file.
+The GitHub Actions workflow in `.github/workflows/ci.yml`:
 
-### Webhook forbidden actions
-
-- It never accepts an image URL.
-- It never accepts a compose file path.
-- It never accepts a command to run.
-- It never accepts a PR number to deploy.
-- It never talks to Docker directly.
-
-### Worker responsibilities
-
-- Talks to the GitHub API.
-- Computes desired preview state.
-- Runs `docker compose`.
-- Removes stale preview deployments.
-- Resets preview data and optionally seeds SQLite.
+1. installs the project on Python 3.14
+2. runs Ruff, mypy, and pytest with coverage
+3. builds the production Docker image
+4. publishes the image to GHCR on successful pushes to `main` or version tags
 
 ## Troubleshooting
 
-- **Webhook returns 401**: confirm the shared secret matches GitHub and the `X-Hub-Signature-256` header is present.
-- **Webhook returns 403**: check that the payload repository matches the configured `owner/repo`.
-- **Worker exits with GitHub auth errors**: verify the token env var exists for the service user.
-- **No previews are created**: confirm the project config is in the configured directory and the worker can read it.
-- **Compose deployment fails**: run the generated `docker compose` command manually with the same project name to inspect container errors.
-- **Wildcard TLS fails for PR subdomains**: configure Traefik DNS-01 for wildcard certificates.
-
-## Testing
-
-Run the test suite with:
-
-```bash
-pytest
-```
+- **401 from webhook**: confirm the GitHub secret matches and that `X-Hub-Signature-256` is present.
+- **403 from webhook**: verify the payload repository matches the configured `owner/repo`.
+- **worker GitHub auth failure**: verify the token env var exists for the service user.
+- **preview not created**: confirm the worker can read the project config and the image tag exists.
+- **compose failure**: manually run the generated compose command with the same project name.
+- **wildcard TLS failure**: Traefik wildcard preview domains require DNS-01.
 
 ## Operational note
 
-This design is safer than exposing a public service with direct Docker access, but preview environments still run PR code. Treat the staging host as less trusted than production and do not share sensitive secrets or unrestricted internal network access.
+This design is safer than exposing a public service with direct Docker access, but preview environments still execute PR code. Treat the staging host as less trusted than production and do not share production secrets or unrestricted private network access with it.

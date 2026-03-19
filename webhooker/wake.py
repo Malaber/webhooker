@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from webhooker.paths import ensure_parent_dir
@@ -9,7 +9,7 @@ from webhooker.paths import ensure_parent_dir
 
 def touch_wake_file(path: str) -> None:
     ensure_parent_dir(path)
-    Path(path).write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+    Path(path).write_text(datetime.now(UTC).isoformat(), encoding="utf-8")
 
 
 

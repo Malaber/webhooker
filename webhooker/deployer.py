@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from webhooker.models import DeployedPreview, ProjectConfig, PullRequestInfo
+from webhooker.paths import ensure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class Deployer:
         )
 
     def _compose_up(self, compose_project: str, extra_env: dict[str, str]) -> None:
-        logger.info("Deploying preview", extra={"compose_project": compose_project})
+        logger.info("Deploying preview project=%s", compose_project)
         self._run(
             [
                 self.config.deployment.compose_bin,
@@ -62,7 +63,7 @@ class Deployer:
         )
 
     def _compose_down(self, compose_project: str) -> None:
-        logger.info("Removing preview", extra={"compose_project": compose_project})
+        logger.info("Removing preview project=%s", compose_project)
         self._run(
             [
                 self.config.deployment.compose_bin,
@@ -88,7 +89,7 @@ class Deployer:
             )
             for part in self.config.preview.seed_command
         ]
-        logger.info("Seeding preview", extra={"compose_project": compose_project})
+        logger.info("Seeding preview project=%s", compose_project)
         self._run(command)
 
     def deploy_preview(self, pr: PullRequestInfo) -> DeployedPreview:
@@ -100,7 +101,7 @@ class Deployer:
         if self.config.preview.reset_data_on_redeploy and Path(data_dir).exists():
             shutil.rmtree(data_dir)
 
-        Path(data_dir).mkdir(parents=True, exist_ok=True)
+        ensure_dir(data_dir)
 
         extra_env = {
             "APP_IMAGE": image,

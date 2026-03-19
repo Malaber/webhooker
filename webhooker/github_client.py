@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
+
+import httpx
 
 from webhooker.config import env_required
 from webhooker.models import ProjectConfig, PullRequestInfo
 
 
 class GitHubClient:
-    def __init__(self, config: ProjectConfig) -> None:
+    def __init__(
+        self,
+        config: ProjectConfig,
+        client: httpx.Client | None = None,
+    ) -> None:
         self.config = config
+        self._client = client
         token = env_required(config.github.token_env)
         self.base_url = "https://api.github.com"
         self.headers = {
@@ -18,21 +26,23 @@ class GitHubClient:
         }
 
     def list_open_pull_requests(self) -> list[PullRequestInfo]:
-        try:
-            import httpx
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("httpx is required to query GitHub") from exc
-
         owner = self.config.github.owner
         repo = self.config.github.repo
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
         params = {"state": "open", "per_page": 100}
 
-        with httpx.Client(timeout=30.0, headers=self.headers) as client:
-            response = client.get(url, params=params)
+        if self._client is not None:
+            response = self._client.get(url, params=params, headers=self.headers, timeout=30.0)
             response.raise_for_status()
-            data: list[dict[str, Any]] = response.json()
+            return self._parse_pull_requests(response.json())
 
+        with httpx.Client() as client:
+            response = client.get(url, params=params, headers=self.headers, timeout=30.0)
+            response.raise_for_status()
+            return self._parse_pull_requests(response.json())
+
+    @staticmethod
+    def _parse_pull_requests(data: Iterable[dict[str, Any]]) -> list[PullRequestInfo]:
         return [
             PullRequestInfo(
                 number=item["number"],

@@ -6,7 +6,7 @@ VENV_PATH="$PROJECT_ROOT/.venv"
 CONFIG_PATH="/etc/webhooker/projects"
 SYSTEMD_PATH="/etc/systemd/system"
 
-python3 -m venv "$VENV_PATH"
+python3.14 -m venv "$VENV_PATH"
 "$VENV_PATH/bin/pip" install --upgrade pip
 "$VENV_PATH/bin/pip" install "$PROJECT_ROOT"
 

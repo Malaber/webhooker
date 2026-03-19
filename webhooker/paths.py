@@ -4,10 +4,10 @@ from pathlib import Path
 
 
 
-def ensure_parent_dir(path: str) -> None:
+def ensure_parent_dir(path: str | Path) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 
 
-def ensure_dir(path: str) -> None:
+def ensure_dir(path: str | Path) -> None:
     Path(path).mkdir(parents=True, exist_ok=True)

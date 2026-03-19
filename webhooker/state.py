@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from webhooker.models import ProjectState
@@ -13,8 +12,7 @@ def load_state(path: str, project_id: str) -> ProjectState:
     if not state_path.exists():
         return ProjectState(project_id=project_id)
 
-    raw = json.loads(state_path.read_text(encoding="utf-8"))
-    return ProjectState.model_validate(raw)
+    return ProjectState.model_validate_json(state_path.read_text(encoding="utf-8"))
 
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from webhooker.models import DeployedPreview, ProjectConfig, PullRequestInfo, ProjectState
+from webhooker.models import DeployedPreview, ProjectConfig, ProjectState, PullRequestInfo
 from webhooker.state import save_state
 from webhooker.worker import reconcile_project
 
@@ -35,53 +35,13 @@ class FakeDeployer:
         self.removed.append(deployed.pr)
 
 
-def build_config(tmp_path) -> ProjectConfig:
-    return ProjectConfig.model_validate(
-        {
-            "project_id": "demo",
-            "github": {
-                "owner": "example",
-                "repo": "repo",
-                "token_env": "GITHUB_TOKEN",
-                "webhook_secret_env": "GITHUB_WEBHOOK_SECRET",
-            },
-            "deployment": {
-                "compose_file": "/tmp/compose.yml",
-                "working_directory": "/tmp",
-                "project_name_prefix": "demo-pr-",
-                "preview_base_domain": "pr.example.test",
-                "hostname_template": "{pr}.pr.example.test",
-            },
-            "image": {
-                "registry": "ghcr.io",
-                "repository": "example/repo",
-                "tag_template": "pr-{pr}-{sha7}",
-            },
-            "preview": {
-                "base_dir": "/tmp/previews",
-                "data_dir_template": "/tmp/previews/pr-{pr}",
-                "sqlite_path_template": "/tmp/previews/pr-{pr}/app.db",
-            },
-            "reconcile": {
-                "poll_interval_seconds": 600,
-                "cleanup_closed_prs": True,
-                "redeploy_on_sha_change": True,
-            },
-            "traefik": {"certresolver": "letsencrypt"},
-            "state": {"state_file": str(tmp_path / "state.json")},
-            "wake": {"wake_file": str(tmp_path / "wake")},
-        }
-    )
-
-
-def test_new_pr_causes_deploy(tmp_path) -> None:
-    config = build_config(tmp_path)
-    deployer = FakeDeployer(config)
+def test_new_pr_causes_deploy(project_config) -> None:
+    deployer = FakeDeployer(project_config)
     prs = [PullRequestInfo(number=5, head_sha="abcdef123456", state="open")]
 
     reconcile_project(
-        config,
-        github_client_factory=lambda _: FakeGitHubClient(config, prs),
+        project_config,
+        github_client_factory=lambda _: FakeGitHubClient(project_config, prs),
         deployer_factory=lambda _: deployer,
     )
 
@@ -89,12 +49,11 @@ def test_new_pr_causes_deploy(tmp_path) -> None:
     assert deployer.removed == []
 
 
-def test_changed_sha_causes_redeploy(tmp_path) -> None:
-    config = build_config(tmp_path)
+def test_changed_sha_causes_redeploy(project_config) -> None:
     save_state(
-        config.state.state_file,
+        project_config.state.state_file,
         ProjectState(
-            project_id=config.project_id,
+            project_id=project_config.project_id,
             deployed={
                 5: DeployedPreview(
                     pr=5,
@@ -107,12 +66,12 @@ def test_changed_sha_causes_redeploy(tmp_path) -> None:
             },
         ),
     )
-    deployer = FakeDeployer(config)
+    deployer = FakeDeployer(project_config)
     prs = [PullRequestInfo(number=5, head_sha="newsha123456", state="open")]
 
     reconcile_project(
-        config,
-        github_client_factory=lambda _: FakeGitHubClient(config, prs),
+        project_config,
+        github_client_factory=lambda _: FakeGitHubClient(project_config, prs),
         deployer_factory=lambda _: deployer,
     )
 
@@ -120,12 +79,11 @@ def test_changed_sha_causes_redeploy(tmp_path) -> None:
     assert deployer.deployed == [5]
 
 
-def test_closed_pr_causes_cleanup(tmp_path) -> None:
-    config = build_config(tmp_path)
+def test_closed_pr_causes_cleanup(project_config) -> None:
     save_state(
-        config.state.state_file,
+        project_config.state.state_file,
         ProjectState(
-            project_id=config.project_id,
+            project_id=project_config.project_id,
             deployed={
                 7: DeployedPreview(
                     pr=7,
@@ -138,11 +96,11 @@ def test_closed_pr_causes_cleanup(tmp_path) -> None:
             },
         ),
     )
-    deployer = FakeDeployer(config)
+    deployer = FakeDeployer(project_config)
 
     reconcile_project(
-        config,
-        github_client_factory=lambda _: FakeGitHubClient(config, []),
+        project_config,
+        github_client_factory=lambda _: FakeGitHubClient(project_config, []),
         deployer_factory=lambda _: deployer,
     )
 
