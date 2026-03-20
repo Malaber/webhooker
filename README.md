@@ -390,37 +390,139 @@ When the configured branch moves, `webhooker` will:
 - keep only the newest three backups
 - start the new image with the same long-lived data directory
 
-## Installing webhooker on the deploy host
+## Recommended webhooker installation
 
-The repository currently assumes a host-native install for `webhooker` itself. That is the simplest and best-documented path because the worker needs local access to the Docker CLI and your app Compose files.
+The recommended installation is to run `webhooker` itself as two containers:
 
-On the deploy host:
+- one `webhooker-api` container
+- one `webhooker-worker` container
 
-```bash
-sudo mkdir -p /opt/webhooker
-sudo git clone https://github.com/Malaber/webhooker.git /opt/webhooker
-cd /opt/webhooker
-python3.14 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install .
+The worker container is the only one that needs Docker access, so it should have the Docker socket mounted. Both containers should use the image published by this repository's CI.
+
+The workflow publishes an image to:
+
+- `ghcr.io/<owner>/<repo>/webhooker`
+
+For this repository, that means:
+
+- `ghcr.io/malaber/webhooker/webhooker:<tag>`
+
+You can pin that image by branch, tag, or SHA-based tag published by CI.
+
+### Recommended host layout
+
+```text
+/opt/webhooker/
+└── compose.yml
+
+/etc/webhooker/
+├── projects/
+│   ├── example-review.yaml
+│   └── example-production.yaml
+└── env/
+    └── webhooker.env
+
+/opt/example-app/
+└── deploy/
+    ├── compose.review.yml
+    ├── compose.production.yml
+    ├── env/
+    └── config/
+
+/var/lib/webhooker/
+├── state/
+└── wake/
+
+/srv/webhooker/
+├── reviews/
+└── production/
 ```
 
-Then place your project configs in `/etc/webhooker/projects/` and run:
+### Recommended webhooker Compose stack
 
-```bash
-/opt/webhooker/.venv/bin/webhooker-api --config-dir /etc/webhooker/projects --host 127.0.0.1 --port 9100
-/opt/webhooker/.venv/bin/webhooker-worker --config-dir /etc/webhooker/projects
+Store this on the deploy host, for example at `/opt/webhooker/compose.yml`:
+
+```yaml
+services:
+  webhooker-api:
+    image: ghcr.io/malaber/webhooker/webhooker:main
+    restart: unless-stopped
+    command:
+      - webhooker-api
+      - --config-dir
+      - /etc/webhooker/projects
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9100"
+    env_file:
+      - /etc/webhooker/env/webhooker.env
+    volumes:
+      - /etc/webhooker/projects:/etc/webhooker/projects:ro
+      - /var/lib/webhooker/wake:/var/lib/webhooker/wake
+    ports:
+      - "127.0.0.1:9100:9100"
+
+  webhooker-worker:
+    image: ghcr.io/malaber/webhooker/webhooker:main
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          webhooker-worker --config-dir /etc/webhooker/projects
+          sleep 60
+        done
+    env_file:
+      - /etc/webhooker/env/webhooker.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/webhooker/projects:/etc/webhooker/projects:ro
+      - /opt/example-app/deploy:/opt/example-app/deploy:ro
+      - /var/lib/webhooker/state:/var/lib/webhooker/state
+      - /var/lib/webhooker/wake:/var/lib/webhooker/wake
+      - /srv/webhooker:/srv/webhooker
 ```
 
-If you want to run `webhooker` itself inside Docker Compose, you can, but you will need a custom image that includes the Docker CLI and you must mount:
+This setup keeps the trust boundary clean:
 
-- the Docker socket
-- `/etc/webhooker/projects`
-- the app deployment templates such as `/opt/example-app/deploy`
-- the state and wake directories
+- the API container validates GitHub webhooks and only touches wake files
+- the worker container reads project configs, talks to GitHub, and runs `docker compose`
+- only the worker gets access to `/var/run/docker.sock`
 
-That containerized setup is possible, but it is not the default example in this repository.
+### Why these mounts are required
+
+- `/var/run/docker.sock`: lets the worker talk to the host Docker daemon
+- `/etc/webhooker/projects`: lets both containers read the `webhooker` project YAML files
+- `/opt/example-app/deploy`: lets the worker read the app Compose templates and app env/config files referenced by those templates
+- `/var/lib/webhooker/state`: stores persisted reconciliation state
+- `/var/lib/webhooker/wake`: stores wake files created by the API and consumed by the worker
+- `/srv/webhooker`: holds persistent review and production app data such as SQLite files and backups
+
+### Recommended environment file for webhooker itself
+
+Store this on the host at `/etc/webhooker/env/webhooker.env`:
+
+```dotenv
+GITHUB_TOKEN=replace-me
+GITHUB_WEBHOOK_SECRET=replace-me
+```
+
+If you manage multiple projects with different GitHub credentials, you can still use one shared env file, or you can split secrets by container orchestration approach. The important rule is that the environment variable names must match the names used in each `webhooker` YAML file.
+
+### Starting the webhooker stack
+
+```bash
+mkdir -p /etc/webhooker/projects /etc/webhooker/env /var/lib/webhooker/state /var/lib/webhooker/wake
+docker compose -f /opt/webhooker/compose.yml up -d
+```
+
+After that:
+
+- point your reverse proxy at `127.0.0.1:9100`
+- configure the GitHub webhook to call `/github/<project_id>/wake`
+- place your app deployment templates and app config files under `/opt/<app-name>/deploy`
 
 ## Security model
 
@@ -468,39 +570,9 @@ python -m mypy webhooker
 python -m pytest
 ```
 
-## Running the services
-
-### API
-
-```bash
-webhooker-api --config-dir /etc/webhooker/projects --host 127.0.0.1 --port 9100
-```
-
-### Worker
-
-```bash
-webhooker-worker --config-dir /etc/webhooker/projects
-```
-
-## Systemd setup
-
-Use the files in `systemd/` and enable the timer-driven worker:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now webhooker-api.service
-sudo systemctl enable --now webhooker-worker.timer
-```
-
-To reconcile immediately:
-
-```bash
-sudo systemctl start webhooker-worker.service
-```
-
 ## Docker image
 
-The repository `Dockerfile` builds a production image based on `python:3.14-slim`.
+The repository `Dockerfile` builds the image used for both the API container and the worker container.
 
 ```bash
 docker build -t webhooker:local .
