@@ -121,32 +121,206 @@ Set `deployment.mode: production` and provide:
 - optional `production.seed_command`
 - optional `image.production_tag_template`
 
+## How webhooker deploys your app
+
+`webhooker` does not generate a Compose file for your application. You create and maintain the Compose template yourself, then point `webhooker` at it with:
+
+- `deployment.compose_file`: the exact Compose file to run
+- `deployment.working_directory`: the directory where `docker compose` should run
+
+At reconcile time, `webhooker` executes commands like:
+
+```bash
+docker compose -p <project-name> -f <compose-file> up -d --remove-orphans
+docker compose -p <project-name> -f <compose-file> down --remove-orphans
+```
+
+That means the app deployment template must already exist on the deploy host. A common layout is:
+
+```text
+/opt/example-app/
+├── deploy/
+│   ├── compose.review.yml
+│   └── compose.production.yml
+└── ...
+
+/etc/webhooker/projects/
+├── example-review.yaml
+└── example-production.yaml
+
+/srv/webhooker/
+├── reviews/example-app/
+└── production/example-app/
+```
+
+If you are onboarding a new app, think of the setup in three pieces:
+
+1. Your app CI builds and pushes Docker images.
+2. You write one or two app-specific Compose templates on the deploy host.
+3. You write one `webhooker` YAML file per deployment mode that points to those templates.
+
+## What your app Compose template must do
+
+Your application Compose file should be a normal Compose file that can be started with `docker compose -f ... up -d`. The important difference is that it should read these environment variables, because `webhooker` injects them at runtime:
+
+- `APP_IMAGE`: full image reference chosen by `webhooker`
+- `APP_HOSTNAME`: hostname for Traefik or your reverse proxy
+- `APP_DATA_DIR`: host directory where the app should store persistent data
+- `APP_SQLITE_PATH`: host path to the SQLite file
+- `TRAEFIK_ROUTER`
+- `TRAEFIK_SERVICE`
+- `TRAEFIK_CERTRESOLVER`
+
+For a junior developer, the safest mental model is: `webhooker` chooses the image tag and the per-environment names, but your Compose file still defines the containers, ports, volumes, labels, commands, and health checks for the app.
+
+### Example review Compose template for an app
+
+Store this on the deployment host, for example at `/opt/example-app/deploy/compose.review.yml`:
+
+```yaml
+services:
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    environment:
+      APP_HOSTNAME: ${APP_HOSTNAME}
+      DATABASE_URL: sqlite:////data/app.db
+    volumes:
+      - ${APP_DATA_DIR}:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.${TRAEFIK_ROUTER}.rule: Host(`${APP_HOSTNAME}`)
+      traefik.http.routers.${TRAEFIK_ROUTER}.entrypoints: websecure
+      traefik.http.routers.${TRAEFIK_ROUTER}.tls.certresolver: ${TRAEFIK_CERTRESOLVER}
+      traefik.http.services.${TRAEFIK_SERVICE}.loadbalancer.server.port: "8000"
+```
+
+This file is just an app deployment template. `webhooker` will reuse the same template for every PR, but with a different Compose project name, hostname, image tag, and data directory.
+
+### Example production Compose template for an app
+
+Store this on the deployment host, for example at `/opt/example-app/deploy/compose.production.yml`:
+
+```yaml
+services:
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    environment:
+      APP_HOSTNAME: ${APP_HOSTNAME}
+      DATABASE_URL: sqlite:////data/app.db
+    volumes:
+      - ${APP_DATA_DIR}:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.${TRAEFIK_ROUTER}.rule: Host(`${APP_HOSTNAME}`)
+      traefik.http.routers.${TRAEFIK_ROUTER}.entrypoints: websecure
+      traefik.http.routers.${TRAEFIK_ROUTER}.tls.certresolver: ${TRAEFIK_CERTRESOLVER}
+      traefik.http.services.${TRAEFIK_SERVICE}.loadbalancer.server.port: "8000"
+```
+
+For production, the template is usually almost identical. The difference is in the `webhooker` config: production tracks one branch and one long-lived data directory instead of creating one deployment per PR.
+
 ## Review deployment example
 
 `config/example.project.yaml` shows a complete review deployment example. It manages one Compose project per PR and stores review SQLite files under `/srv/webhooker/reviews/example-app/`.
 
-### How to configure and use webhooker for review deployments
+### Step-by-step review setup
 
-1. Build preview images in your app CI using a PR tag like `pr-<number>-<sha7>`.
-2. Install `webhooker` on the review host.
-3. Copy `config/example.project.yaml` to `/etc/webhooker/projects/example-review.yaml` and adjust repository/image/domain values.
-4. Point your reverse proxy to `https://webhooker.example.com/github/example-review/wake`.
-5. Configure a GitHub webhook secret and export matching environment variables for the systemd services.
-6. Enable `webhooker-api.service` and `webhooker-worker.timer`.
-7. When a PR opens, synchronizes, or reopens, GitHub wakes the worker and the worker reconciles the per-PR review environment.
+1. Build preview images in your app CI.
+   Use tags like `pr-<number>-<sha7>` so they match `image.tag_template`.
+2. Prepare the app deployment directory on the host.
+   Example: create `/opt/example-app/deploy/compose.review.yml`.
+3. Write the review Compose template for the app.
+   The template should use `${APP_IMAGE}` and mount `${APP_DATA_DIR}` so each PR gets its own persistent SQLite file.
+4. Copy the webhooker config.
+   Start from `config/example.project.yaml` and save it as `/etc/webhooker/projects/example-review.yaml`.
+5. Update the webhooker config fields.
+   Set the GitHub repository, image registry, domain, and point `deployment.compose_file` at `/opt/example-app/deploy/compose.review.yml`.
+6. Create the runtime directories.
+   Example: `/srv/webhooker/reviews/example-app`, `/var/lib/webhooker/state`, and `/var/lib/webhooker/wake`.
+7. Configure secrets for the host services.
+   Export the GitHub API token and webhook secret so both `webhooker-api` and `webhooker-worker` can read them.
+8. Expose the wake endpoint.
+   Example: `https://webhooker.example.com/github/example-review/wake`.
+9. Configure the GitHub webhook.
+   Send `pull_request` and `ping` events for the same repository configured in the YAML.
+10. Start `webhooker`.
+    Enable `webhooker-api.service` and `webhooker-worker.timer`.
+
+When a PR opens, synchronizes, or reopens, `webhooker` will:
+
+- compute the image tag from the PR number and head SHA
+- start `docker compose` with a PR-specific project name
+- keep the PR SQLite file between image upgrades
+- run the review seed command only the first time that PR environment is created
 
 ## Production deployment example
 
 `config/example.production.yaml` shows a complete production deployment example. It tracks the `main` branch, deploys one Compose project, and stores SQLite backups under `/srv/webhooker/production/example-app/backups/`.
 
-### How to configure and use webhooker for production deployments
+### Step-by-step production setup
 
-1. Build and publish production images in your app CI using a stable production tag template such as `sha-<sha7>`.
-2. Copy `config/example.production.yaml` to `/etc/webhooker/projects/example-production.yaml` and update repository/image/hostname/path values.
-3. Ensure the target app Compose file uses the host-mounted `APP_DATA_DIR` and `APP_SQLITE_PATH`.
-4. Expose the wake endpoint, for example `https://webhooker.example.com/github/example-production/wake`.
-5. Configure GitHub to send `push` and `ping` events for the production repository.
-6. Enable the worker timer. On each branch SHA change, webhooker stops the old stack, backs up SQLite, keeps the newest 3 backups, and starts the new stack.
+1. Build production images in your app CI.
+   Use a stable tag pattern like `sha-<sha7>` so it matches `image.production_tag_template`.
+2. Prepare the app deployment directory on the host.
+   Example: create `/opt/example-app/deploy/compose.production.yml`.
+3. Write the production Compose template for the app.
+   The template should mount `${APP_DATA_DIR}` so the SQLite file exists on the host and can be backed up before upgrades.
+4. Copy the webhooker config.
+   Start from `config/example.production.yaml` and save it as `/etc/webhooker/projects/example-production.yaml`.
+5. Update the webhooker config fields.
+   Set repository, image path, branch name, hostname, and point `deployment.compose_file` at `/opt/example-app/deploy/compose.production.yml`.
+6. Create the runtime directories.
+   Example: `/srv/webhooker/production/example-app`, `/srv/webhooker/production/example-app/backups`, `/var/lib/webhooker/state`, and `/var/lib/webhooker/wake`.
+7. Configure secrets for the host services.
+   Export the GitHub API token and webhook secret for the API and worker.
+8. Expose the wake endpoint.
+   Example: `https://webhooker.example.com/github/example-production/wake`.
+9. Configure the GitHub webhook.
+   Send `push` and `ping` events for the production repository.
+10. Start `webhooker`.
+    Enable the worker timer and the API service.
+
+When the configured branch moves, `webhooker` will:
+
+- resolve the new branch head SHA from GitHub
+- stop the current Compose project
+- copy the SQLite database into the backup directory
+- keep only the newest three backups
+- start the new image with the same long-lived data directory
+
+## Installing webhooker on the deploy host
+
+The repository currently assumes a host-native install for `webhooker` itself. That is the simplest and best-documented path because the worker needs local access to the Docker CLI and your app Compose files.
+
+On the deploy host:
+
+```bash
+sudo mkdir -p /opt/webhooker
+sudo git clone https://github.com/Malaber/webhooker.git /opt/webhooker
+cd /opt/webhooker
+python3.14 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install .
+```
+
+Then place your project configs in `/etc/webhooker/projects/` and run:
+
+```bash
+/opt/webhooker/.venv/bin/webhooker-api --config-dir /etc/webhooker/projects --host 127.0.0.1 --port 9100
+/opt/webhooker/.venv/bin/webhooker-worker --config-dir /etc/webhooker/projects
+```
+
+If you want to run `webhooker` itself inside Docker Compose, you can, but you will need a custom image that includes the Docker CLI and you must mount:
+
+- the Docker socket
+- `/etc/webhooker/projects`
+- the app deployment templates such as `/opt/example-app/deploy`
+- the state and wake directories
+
+That containerized setup is possible, but it is not the default example in this repository.
 
 ## Security model
 
