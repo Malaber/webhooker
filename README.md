@@ -173,6 +173,106 @@ Your application Compose file should be a normal Compose file that can be starte
 
 For a junior developer, the safest mental model is: `webhooker` chooses the image tag and the per-environment names, but your Compose file still defines the containers, ports, volumes, labels, commands, and health checks for the app.
 
+## Where your app settings should live
+
+The settings for the deployed app are usually split into three groups:
+
+1. Build-time defaults inside the app image.
+   Example: Python module path, default port, or a default log level.
+2. Non-secret runtime settings stored next to the app deployment templates.
+   Example: feature flags, public base URLs, worker concurrency, or app mode.
+3. Secret runtime settings stored only on the deploy host.
+   Example: API keys, OAuth secrets, SMTP passwords, and production-only database credentials.
+
+`webhooker` should not be the main place where your app settings live. Its YAML files are for deployment orchestration: which repo to watch, which image tags to use, where the data directories are, and which Compose template to run.
+
+For most apps, a good layout is:
+
+```text
+/opt/example-app/
+└── deploy/
+    ├── compose.review.yml
+    ├── compose.production.yml
+    ├── env/
+    │   ├── review.common.env
+    │   └── production.common.env
+    └── config/
+        ├── review.settings.toml
+        └── production.settings.toml
+
+/etc/example-app/
+├── review.secrets.env
+└── production.secrets.env
+```
+
+That gives you a clean rule:
+
+- commit non-secret defaults in the app repo under `deploy/`
+- publish secrets to the server under `/etc/<app-name>/`
+- let the Compose template combine both at runtime
+
+### Example: publishing runtime settings with Compose
+
+This is a practical production example:
+
+```yaml
+services:
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - /opt/example-app/deploy/env/production.common.env
+      - /etc/example-app/production.secrets.env
+    volumes:
+      - ${APP_DATA_DIR}:/data
+      - /opt/example-app/deploy/config/production.settings.toml:/app/config/settings.toml:ro
+    environment:
+      APP_HOSTNAME: ${APP_HOSTNAME}
+      SQLITE_PATH: ${APP_SQLITE_PATH}
+```
+
+In that example:
+
+- the image is published by app CI
+- the Compose template is published to `/opt/example-app/deploy/compose.production.yml`
+- non-secret environment settings are published to `/opt/example-app/deploy/env/production.common.env`
+- secret settings are published to `/etc/example-app/production.secrets.env`
+- a config file is published to `/opt/example-app/deploy/config/production.settings.toml`
+
+### Who should publish those files
+
+For a junior developer, the simplest answer is:
+
+- the app repository should own `deploy/compose.*.yml`, `deploy/env/*.env`, and any non-secret config files
+- your deployment process should copy those files to the deploy host, usually with `rsync`, Ansible, a CI deploy job, or a Git checkout on the server
+- secrets should be created manually once or managed by your secret-management tool, but they should not be committed to Git
+
+### What should go in the webhooker YAML vs the app files
+
+Put this in the `webhooker` project YAML:
+
+- GitHub repo name
+- image registry and tag template
+- deployment mode
+- compose file path
+- working directory
+- host data paths
+- wake/state paths
+- branch name for production
+
+Put this in the app Compose template or app env/config files:
+
+- app ports
+- reverse-proxy labels
+- app framework settings
+- feature flags
+- API endpoints
+- SMTP settings
+- OAuth configuration
+- secret keys and tokens
+
+If you follow that split, `webhooker` stays small and generic, and the app keeps ownership of its real runtime configuration.
+
 ### Example review Compose template for an app
 
 Store this on the deployment host, for example at `/opt/example-app/deploy/compose.review.yml`:
