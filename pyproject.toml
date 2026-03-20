@@ -36,7 +36,7 @@ include-package-data = true
 include = ["webhooker*"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=webhooker --cov-report=term-missing --cov-fail-under=95"
+addopts = "--cov=webhooker --cov-report=term-missing --cov-fail-under=100"
 testpaths = ["tests"]
 
 [tool.black]

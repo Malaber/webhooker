@@ -164,6 +164,45 @@ def test_review_mode_requires_preview_section(tmp_path: Path) -> None:
         load_project_config(config_file)
 
 
+def test_review_mode_requires_hostname_template(tmp_path: Path) -> None:
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        textwrap.dedent("""
+            project_id: demo
+            github:
+              owner: example
+              repo: repo
+              token_env: GITHUB_TOKEN
+              webhook_secret_env: GITHUB_WEBHOOK_SECRET
+            deployment:
+              mode: review
+              compose_file: /tmp/compose.yml
+              working_directory: /tmp
+              project_name_prefix: demo-pr-
+            image:
+              registry: ghcr.io
+              repository: example/repo
+              tag_template: "pr-{pr}-{sha7}"
+            preview:
+              base_dir: /tmp/reviews
+              data_dir_template: "/tmp/reviews/pr-{pr}"
+              sqlite_path_template: "/tmp/reviews/pr-{pr}/app.db"
+            reconcile:
+              poll_interval_seconds: 600
+            traefik:
+              certresolver: letsencrypt
+            state:
+              state_file: /tmp/state.json
+            wake:
+              wake_file: /tmp/wake
+            """).strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_project_config(config_file)
+
+
 def test_production_mode_requires_hostname(tmp_path: Path) -> None:
     config_file = tmp_path / "production.yaml"
     config_file.write_text(
@@ -180,6 +219,83 @@ def test_production_mode_requires_hostname(tmp_path: Path) -> None:
               working_directory: /tmp
               project_name_prefix: demo-
               production_project_name: demo-production
+            image:
+              registry: ghcr.io
+              repository: example/repo
+              tag_template: "unused"
+            production:
+              data_dir: /tmp/production
+              sqlite_path: /tmp/production/app.db
+              backup_dir: /tmp/production/backups
+            reconcile:
+              poll_interval_seconds: 600
+            traefik:
+              certresolver: letsencrypt
+            state:
+              state_file: /tmp/production-state.json
+            wake:
+              wake_file: /tmp/production-wake
+            """).strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_project_config(config_file)
+
+
+def test_production_mode_requires_production_section(tmp_path: Path) -> None:
+    config_file = tmp_path / "production.yaml"
+    config_file.write_text(
+        textwrap.dedent("""
+            project_id: production-demo
+            github:
+              owner: example
+              repo: repo
+              token_env: GITHUB_TOKEN
+              webhook_secret_env: GITHUB_WEBHOOK_SECRET
+            deployment:
+              mode: production
+              compose_file: /tmp/compose.yml
+              working_directory: /tmp
+              project_name_prefix: demo-
+              production_project_name: demo-production
+              production_hostname: app.example.test
+            image:
+              registry: ghcr.io
+              repository: example/repo
+              tag_template: "unused"
+            reconcile:
+              poll_interval_seconds: 600
+            traefik:
+              certresolver: letsencrypt
+            state:
+              state_file: /tmp/production-state.json
+            wake:
+              wake_file: /tmp/production-wake
+            """).strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_project_config(config_file)
+
+
+def test_production_mode_requires_project_name(tmp_path: Path) -> None:
+    config_file = tmp_path / "production.yaml"
+    config_file.write_text(
+        textwrap.dedent("""
+            project_id: production-demo
+            github:
+              owner: example
+              repo: repo
+              token_env: GITHUB_TOKEN
+              webhook_secret_env: GITHUB_WEBHOOK_SECRET
+            deployment:
+              mode: production
+              compose_file: /tmp/compose.yml
+              working_directory: /tmp
+              project_name_prefix: demo-
+              production_hostname: app.example.test
             image:
               registry: ghcr.io
               repository: example/repo

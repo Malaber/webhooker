@@ -154,3 +154,23 @@ def test_wake_endpoint_rejects_unknown_project(
     )
 
     assert response.status_code == 404
+
+
+def test_wake_endpoint_rejects_missing_webhook_secret(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(create_app(str(config_dir)))
+    body = b"{}"
+    monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
+
+    response = client.post(
+        "/github/review-demo/wake",
+        content=body,
+        headers={
+            "X-GitHub-Event": "pull_request",
+            "X-Hub-Signature-256": "sha256=anything",
+        },
+    )
+
+    assert response.status_code == 500

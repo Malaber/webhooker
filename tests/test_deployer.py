@@ -210,3 +210,39 @@ def test_production_helper_guards_raise_when_mode_specific_fields_are_missing(
 
     with pytest.raises(RuntimeError):
         incomplete_deployer._production_hostname()
+
+
+def test_seed_returns_immediately_when_command_is_empty(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+    called = False
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal called
+        called = True
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    deployer._seed([], "demo-pr-1")
+
+    assert called is False
+
+
+def test_backup_sqlite_returns_when_database_is_missing(
+    production_project_config,
+    tmp_path: Path,
+) -> None:
+    deployer = Deployer(production_project_config)
+    missing_sqlite = tmp_path / "missing.db"
+
+    deployer._backup_sqlite(missing_sqlite)
+
+    assert not missing_sqlite.exists()

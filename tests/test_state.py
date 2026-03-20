@@ -47,3 +47,7 @@ def test_review_state_string_keys_are_normalized(tmp_path: Path) -> None:
     state = load_state(str(state_file), project_id="ignored")
 
     assert 7 in state.reviews
+
+
+def test_non_mapping_review_state_value_is_left_unchanged() -> None:
+    assert ProjectState.normalize_review_keys(["not", "a", "dict"]) == ["not", "a", "dict"]
