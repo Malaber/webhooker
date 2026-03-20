@@ -159,7 +159,9 @@ class Deployer:
         finally:
             shutil.rmtree(deployed.data_dir, ignore_errors=True)
 
-    def deploy_production(self, sha: str, previous: DeployedProduction | None) -> DeployedProduction:
+    def deploy_production(
+        self, sha: str, previous: DeployedProduction | None
+    ) -> DeployedProduction:
         production = self._production_config()
         compose_project = self._production_project_name()
         hostname = self._production_hostname()

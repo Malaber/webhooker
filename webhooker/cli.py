@@ -11,7 +11,6 @@ from webhooker.logging_utils import configure_logging
 from webhooker.worker import reconcile_project
 
 
-
 def run_api() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-dir", required=True)
@@ -22,7 +21,6 @@ def run_api() -> None:
     configure_logging()
     app = create_app(args.config_dir)
     uvicorn.run(app, host=args.host, port=args.port)
-
 
 
 def run_worker() -> None:

@@ -12,9 +12,7 @@ class GitHubConfig(BaseModel):
     repo: str
     token_env: str
     webhook_secret_env: str
-    required_event_types: list[str] = Field(
-        default_factory=lambda: ["pull_request", "ping"]
-    )
+    required_event_types: list[str] = Field(default_factory=lambda: ["pull_request", "ping"])
 
 
 class DeploymentConfig(BaseModel):

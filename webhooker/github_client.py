@@ -42,18 +42,23 @@ class GitHubClient:
         return str(payload["commit"]["sha"])
 
     def _get(self, url: str, params: dict[str, Any] | None = None) -> httpx.Response:
-        request_kwargs = {
-            "params": params,
-            "headers": self.headers,
-            "timeout": 30.0,
-        }
         if self._client is not None:
-            response = self._client.get(url, **request_kwargs)
+            response = self._client.get(
+                url,
+                params=params,
+                headers=self.headers,
+                timeout=30.0,
+            )
             response.raise_for_status()
             return response
 
         with httpx.Client() as client:
-            response = client.get(url, **request_kwargs)
+            response = client.get(
+                url,
+                params=params,
+                headers=self.headers,
+                timeout=30.0,
+            )
             response.raise_for_status()
             return response
 

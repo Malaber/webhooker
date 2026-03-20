@@ -9,12 +9,10 @@ from pydantic import ValidationError
 from webhooker.config import env_required, load_project_config, load_project_configs
 
 
-
 def test_valid_review_yaml_loads(tmp_path: Path) -> None:
     config_file = tmp_path / "project.yaml"
     config_file.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             project_id: demo
             github:
               owner: example
@@ -44,8 +42,7 @@ def test_valid_review_yaml_loads(tmp_path: Path) -> None:
               state_file: /tmp/state.json
             wake:
               wake_file: /tmp/wake
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -55,12 +52,10 @@ def test_valid_review_yaml_loads(tmp_path: Path) -> None:
     assert config.deployment.mode == "review"
 
 
-
 def test_valid_production_yaml_loads(tmp_path: Path) -> None:
     config_file = tmp_path / "production.yaml"
     config_file.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             project_id: production-demo
             github:
               owner: example
@@ -95,8 +90,7 @@ def test_valid_production_yaml_loads(tmp_path: Path) -> None:
               state_file: /tmp/production-state.json
             wake:
               wake_file: /tmp/production-wake
-            """
-        ).strip(),
+            """).strip(),
         encoding="utf-8",
     )
 
@@ -107,7 +101,6 @@ def test_valid_production_yaml_loads(tmp_path: Path) -> None:
     assert config.production is not None
 
 
-
 def test_missing_required_fields_fail(tmp_path: Path) -> None:
     config_file = tmp_path / "project.yaml"
     config_file.write_text("project_id: demo\n", encoding="utf-8")
@@ -116,12 +109,10 @@ def test_missing_required_fields_fail(tmp_path: Path) -> None:
         load_project_config(config_file)
 
 
-
 def test_load_project_configs_reads_all_yaml_files(config_dir: Path) -> None:
     configs = load_project_configs(config_dir)
 
     assert [config.project_id for config in configs] == ["review-demo"]
-
 
 
 def test_env_required_returns_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,9 +121,84 @@ def test_env_required_returns_value(monkeypatch: pytest.MonkeyPatch) -> None:
     assert env_required("TOKEN") == "present"
 
 
-
 def test_env_required_raises_for_missing_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TOKEN", raising=False)
 
     with pytest.raises(RuntimeError):
         env_required("TOKEN")
+
+
+def test_review_mode_requires_preview_section(tmp_path: Path) -> None:
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        textwrap.dedent("""
+            project_id: demo
+            github:
+              owner: example
+              repo: repo
+              token_env: GITHUB_TOKEN
+              webhook_secret_env: GITHUB_WEBHOOK_SECRET
+            deployment:
+              mode: review
+              compose_file: /tmp/compose.yml
+              working_directory: /tmp
+              project_name_prefix: demo-pr-
+              hostname_template: "pr-{pr}.review.example.test"
+            image:
+              registry: ghcr.io
+              repository: example/repo
+              tag_template: "pr-{pr}-{sha7}"
+            reconcile:
+              poll_interval_seconds: 600
+            traefik:
+              certresolver: letsencrypt
+            state:
+              state_file: /tmp/state.json
+            wake:
+              wake_file: /tmp/wake
+            """).strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_project_config(config_file)
+
+
+def test_production_mode_requires_hostname(tmp_path: Path) -> None:
+    config_file = tmp_path / "production.yaml"
+    config_file.write_text(
+        textwrap.dedent("""
+            project_id: production-demo
+            github:
+              owner: example
+              repo: repo
+              token_env: GITHUB_TOKEN
+              webhook_secret_env: GITHUB_WEBHOOK_SECRET
+            deployment:
+              mode: production
+              compose_file: /tmp/compose.yml
+              working_directory: /tmp
+              project_name_prefix: demo-
+              production_project_name: demo-production
+            image:
+              registry: ghcr.io
+              repository: example/repo
+              tag_template: "unused"
+            production:
+              data_dir: /tmp/production
+              sqlite_path: /tmp/production/app.db
+              backup_dir: /tmp/production/backups
+            reconcile:
+              poll_interval_seconds: 600
+            traefik:
+              certresolver: letsencrypt
+            state:
+              state_file: /tmp/production-state.json
+            wake:
+              wake_file: /tmp/production-wake
+            """).strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_project_config(config_file)

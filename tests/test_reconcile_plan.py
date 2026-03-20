@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from webhooker.models import DeployedProduction, DeployedReview, ProjectConfig, ProjectState, PullRequestInfo
+import pytest
+
+from webhooker.models import (
+    DeployedProduction,
+    DeployedReview,
+    ProjectConfig,
+    ProjectState,
+    PullRequestInfo,
+)
 from webhooker.state import save_state
 from webhooker.worker import reconcile_project
 
@@ -63,7 +71,6 @@ class FakeDeployer:
         )
 
 
-
 def test_new_review_pr_causes_deploy(review_project_config) -> None:
     deployer = FakeDeployer(review_project_config)
     prs = [PullRequestInfo(number=5, head_sha="abcdef123456", state="open")]
@@ -76,7 +83,6 @@ def test_new_review_pr_causes_deploy(review_project_config) -> None:
 
     assert deployer.review_deployed == [5]
     assert deployer.review_removed == []
-
 
 
 def test_changed_review_sha_causes_redeploy_without_cleanup(review_project_config) -> None:
@@ -110,7 +116,6 @@ def test_changed_review_sha_causes_redeploy_without_cleanup(review_project_confi
     assert deployer.review_deployed == [5]
 
 
-
 def test_closed_review_pr_causes_cleanup(review_project_config) -> None:
     save_state(
         review_project_config.state.state_file,
@@ -141,7 +146,6 @@ def test_closed_review_pr_causes_cleanup(review_project_config) -> None:
     assert deployer.review_deployed == []
 
 
-
 def test_production_sha_change_causes_single_redeploy(production_project_config) -> None:
     save_state(
         production_project_config.state.state_file,
@@ -170,3 +174,39 @@ def test_production_sha_change_causes_single_redeploy(production_project_config)
     )
 
     assert deployer.production_deployed == ["newsha123456"]
+
+
+def test_new_production_deploy_is_created(production_project_config) -> None:
+    deployer = FakeDeployer(production_project_config)
+
+    reconcile_project(
+        production_project_config,
+        github_client_factory=lambda _: FakeProductionGitHubClient(
+            production_project_config,
+            "newsha123456",
+        ),
+        deployer_factory=lambda _: deployer,
+    )
+
+    assert deployer.production_deployed == ["newsha123456"]
+
+
+def test_production_without_config_raises(review_project_config) -> None:
+    invalid_config = review_project_config.model_copy(
+        update={
+            "deployment": review_project_config.deployment.model_copy(
+                update={"mode": "production"}
+            ),
+            "preview": None,
+        }
+    )
+
+    with pytest.raises(RuntimeError):
+        reconcile_project(
+            invalid_config,
+            github_client_factory=lambda _: FakeProductionGitHubClient(
+                invalid_config,
+                "newsha123456",
+            ),
+            deployer_factory=lambda _: FakeDeployer(invalid_config),
+        )

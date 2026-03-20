@@ -18,7 +18,16 @@ These instructions apply to the entire repository.
 - Keep tests deterministic and isolated from network and Docker by mocking external calls.
 
 ## Useful commands
-- `python3.14 -m pip install -e .[dev]`
-- `python3.14 -m black .`
-- `python3.14 -m pytest --cov=webhooker --cov-report=term-missing`
-- `python3.14 -m mypy webhooker`
+- `python3.14 -m venv .venv`
+- `.venv/bin/python -m pip install -e '.[dev]'`
+- `.venv/bin/python -m black webhooker tests scripts`
+- `.venv/bin/python -m black --check .`
+- `.venv/bin/python -m pytest --cov=webhooker --cov-report=term-missing`
+- `.venv/bin/python -m mypy webhooker`
+
+## Local validation workflow
+- Use Python 3.14 in a local virtualenv for all development and release validation.
+- Install dependencies with `.venv/bin/python -m pip install -e '.[dev]'`.
+- Run Black in fix mode on project sources first with `.venv/bin/python -m black webhooker tests scripts`.
+- Then run the production gates with `.venv/bin/python -m black --check .`, `.venv/bin/python -m mypy webhooker`, and `.venv/bin/python -m pytest`.
+- Keep local virtualenv directories ignored and outside formatter scope so `black --check .` only validates repository code.

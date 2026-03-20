@@ -15,7 +15,6 @@ GitHubClientFactory = Callable[[ProjectConfig], GitHubClient]
 DeployerFactory = Callable[[ProjectConfig], Deployer]
 
 
-
 def reconcile_project(
     config: ProjectConfig,
     github_client_factory: GitHubClientFactory = GitHubClient,
@@ -32,7 +31,6 @@ def reconcile_project(
 
     save_state(config.state.state_file, state)
     clear_wake_file(config.wake.wake_file)
-
 
 
 def _reconcile_review_project(
@@ -60,7 +58,9 @@ def _reconcile_review_project(
         current = state.reviews.get(pr_number)
 
         if current is None:
-            logger.info("Creating review deployment project_id=%s pr=%s", config.project_id, pr_number)
+            logger.info(
+                "Creating review deployment project_id=%s pr=%s", config.project_id, pr_number
+            )
             state.reviews[pr_number] = deployer.deploy_review(pr)
             continue
 
@@ -71,7 +71,6 @@ def _reconcile_review_project(
                 pr_number,
             )
             state.reviews[pr_number] = deployer.deploy_review(pr)
-
 
 
 def _reconcile_production_project(

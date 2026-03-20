@@ -6,7 +6,6 @@ import pytest
 from webhooker.github_client import GitHubClient
 
 
-
 def test_list_open_pull_requests(review_project_config, monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer test-token"
@@ -26,7 +25,6 @@ def test_list_open_pull_requests(review_project_config, monkeypatch: pytest.Monk
     assert pull_requests[0].head_sha == "abcdef123456"
 
 
-
 def test_get_branch_head_sha(production_project_config, monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/branches/main")
@@ -37,3 +35,35 @@ def test_get_branch_head_sha(production_project_config, monkeypatch: pytest.Monk
     github = GitHubClient(production_project_config, client=client)
 
     assert github.get_branch_head_sha("main") == "abcdef1234567890"
+
+
+def test_get_uses_managed_httpx_client(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            captured["url"] = url
+            captured["kwargs"] = kwargs
+            return httpx.Response(
+                200,
+                request=httpx.Request("GET", url),
+                json=[{"number": 8, "state": "open", "head": {"sha": "fedcba654321"}}],
+            )
+
+    monkeypatch.setenv(review_project_config.github.token_env, "test-token")
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    github = GitHubClient(review_project_config)
+
+    pull_requests = github.list_open_pull_requests()
+
+    assert pull_requests[0].number == 8
+    assert captured["url"] == "https://api.github.com/repos/example/repo/pulls"

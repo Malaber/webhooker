@@ -11,10 +11,8 @@ from fastapi.testclient import TestClient
 from webhooker.api import create_app
 
 
-
 def _signature(secret: str, body: bytes) -> str:
     return "sha256=" + hmac.new(secret.encode("utf-8"), body, sha256).hexdigest()
-
 
 
 def test_healthz(config_dir: Path) -> None:
@@ -24,7 +22,6 @@ def test_healthz(config_dir: Path) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-
 
 
 def test_wake_endpoint_accepts_valid_review_request(
@@ -56,7 +53,6 @@ def test_wake_endpoint_accepts_valid_review_request(
     wake_file.unlink()
 
 
-
 def test_wake_endpoint_rejects_bad_signature(
     config_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -74,7 +70,6 @@ def test_wake_endpoint_rejects_bad_signature(
     )
 
     assert response.status_code == 401
-
 
 
 def test_wake_endpoint_rejects_repository_mismatch(
@@ -96,7 +91,6 @@ def test_wake_endpoint_rejects_repository_mismatch(
     )
 
     assert response.status_code == 403
-
 
 
 def test_wake_endpoint_ignores_unexpected_event(
@@ -121,7 +115,6 @@ def test_wake_endpoint_ignores_unexpected_event(
     assert response.json() == {"status": "ignored", "reason": "event type"}
 
 
-
 def test_wake_endpoint_rejects_invalid_json(
     config_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -141,7 +134,6 @@ def test_wake_endpoint_rejects_invalid_json(
     )
 
     assert response.status_code == 400
-
 
 
 def test_wake_endpoint_rejects_unknown_project(

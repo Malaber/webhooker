@@ -22,6 +22,7 @@ dev = [
   "mypy>=1.11",
   "pytest>=8.3",
   "pytest-cov>=5.0",
+  "types-PyYAML>=6.0.12",
 ]
 
 [project.scripts]
@@ -41,6 +42,13 @@ testpaths = ["tests"]
 [tool.black]
 line-length = 100
 target-version = ["py314"]
+exclude = '''
+/(
+  \.venv.*
+  | build
+  | dist
+)/
+'''
 
 [tool.mypy]
 python_version = "3.14"

@@ -12,7 +12,6 @@ from webhooker.security import verify_github_signature
 from webhooker.wake import touch_wake_file
 
 
-
 def create_app(config_dir: str) -> FastAPI:
     app = FastAPI(title="webhooker", version="0.2.0")
 
