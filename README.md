@@ -171,7 +171,7 @@ Your application Compose file should be a normal Compose file that can be starte
 - `TRAEFIK_SERVICE`
 - `TRAEFIK_CERTRESOLVER`
 
-For a junior developer, the safest mental model is: `webhooker` chooses the image tag and the per-environment names, but your Compose file still defines the containers, ports, volumes, labels, commands, and health checks for the app.
+The safest mental model is: `webhooker` chooses the image tag and the per-environment names, but your Compose file still defines the containers, ports, volumes, labels, commands, and health checks for the app.
 
 ## Where your app settings should live
 
@@ -241,7 +241,7 @@ In that example:
 
 ### Who should publish those files
 
-For a junior developer, the simplest answer is:
+The simplest answer is:
 
 - the app repository should own `deploy/compose.*.yml`, `deploy/env/*.env`, and any non-secret config files
 - your deployment process should copy those files to the deploy host, usually with `rsync`, Ansible, a CI deploy job, or a Git checkout on the server
