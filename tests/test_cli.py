@@ -37,10 +37,10 @@ def test_run_api_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch, config_dir: Pa
 
 def test_run_worker_raises_exit_code_on_project_error(
     monkeypatch: pytest.MonkeyPatch,
-    project_config,
+    review_project_config,
 ) -> None:
     monkeypatch.setattr(cli, "configure_logging", lambda: None)
-    monkeypatch.setattr(cli, "load_project_configs", lambda _: [project_config])
+    monkeypatch.setattr(cli, "load_project_configs", lambda _: [review_project_config])
     monkeypatch.setattr(cli, "reconcile_project", lambda _: (_ for _ in ()).throw(RuntimeError("boom")))
     monkeypatch.setattr(
         cli.argparse.ArgumentParser,

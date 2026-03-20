@@ -1,0 +1,47 @@
+project_id: example-production
+
+github:
+  owner: your-github-user-or-org
+  repo: example-app
+  token_env: GITHUB_TOKEN
+  webhook_secret_env: GITHUB_WEBHOOK_SECRET
+  required_event_types:
+    - push
+    - ping
+
+deployment:
+  mode: production
+  compose_file: /opt/example-app/deploy/compose.production.yml
+  compose_bin: docker
+  working_directory: /opt/example-app/deploy
+  project_name_prefix: example-app-
+  production_project_name: example-app-production
+  production_hostname: app.example.com
+
+image:
+  registry: ghcr.io
+  repository: your-github-user-or-org/example-app
+  tag_template: "unused-for-production"
+  production_tag_template: "sha-{sha7}"
+
+production:
+  branch: main
+  data_dir: /srv/webhooker/production/example-app
+  sqlite_path: /srv/webhooker/production/example-app/app.db
+  backup_dir: /srv/webhooker/production/example-app/backups
+  backup_keep: 3
+
+reconcile:
+  poll_interval_seconds: 600
+  cleanup_closed_prs: false
+  redeploy_on_sha_change: true
+
+traefik:
+  enable_labels: true
+  certresolver: letsencrypt
+
+state:
+  state_file: /var/lib/webhooker/state/example-production.json
+
+wake:
+  wake_file: /var/lib/webhooker/wake/example-production

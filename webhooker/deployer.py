@@ -4,9 +4,17 @@ import logging
 import os
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
-from webhooker.models import DeployedPreview, ProjectConfig, PullRequestInfo
+from webhooker.models import (
+    DeployedProduction,
+    DeployedReview,
+    PreviewConfig,
+    ProductionConfig,
+    ProjectConfig,
+    PullRequestInfo,
+)
 from webhooker.paths import ensure_dir
 
 logger = logging.getLogger(__name__)
@@ -20,18 +28,39 @@ class Deployer:
         return f"{self.config.deployment.project_name_prefix}{pr}"
 
     def hostname_for_pr(self, pr: int) -> str:
-        return self.config.deployment.hostname_template.format(pr=pr)
+        template = self.config.deployment.hostname_template
+        if template is None:
+            raise RuntimeError("hostname_template is required for review deployments")
+        return template.format(pr=pr)
 
-    def image_for_pr(self, pr: int, sha: str) -> str:
+    def review_image_for_pr(self, pr: int, sha: str) -> str:
         sha7 = sha[:7]
         tag = self.config.image.tag_template.format(pr=pr, sha=sha, sha7=sha7)
         return f"{self.config.image.registry}/{self.config.image.repository}:{tag}"
 
+    def production_image_for_sha(self, sha: str) -> str:
+        sha7 = sha[:7]
+        tag_template = self.config.image.production_tag_template or self.config.image.tag_template
+        tag = tag_template.format(sha=sha, sha7=sha7)
+        return f"{self.config.image.registry}/{self.config.image.repository}:{tag}"
+
     def data_dir_for_pr(self, pr: int) -> str:
-        return self.config.preview.data_dir_template.format(pr=pr)
+        preview = self._preview_config()
+        return preview.data_dir_template.format(pr=pr)
 
     def sqlite_path_for_pr(self, pr: int) -> str:
-        return self.config.preview.sqlite_path_template.format(pr=pr)
+        preview = self._preview_config()
+        return preview.sqlite_path_template.format(pr=pr)
+
+    def _preview_config(self) -> PreviewConfig:
+        if self.config.preview is None:
+            raise RuntimeError("preview configuration is required for review deployments")
+        return self.config.preview
+
+    def _production_config(self) -> ProductionConfig:
+        if self.config.production is None:
+            raise RuntimeError("production configuration is required for production deployments")
+        return self.config.production
 
     def _run(self, argv: list[str], env: dict[str, str] | None = None) -> None:
         merged_env = os.environ.copy()
@@ -46,7 +75,7 @@ class Deployer:
         )
 
     def _compose_up(self, compose_project: str, extra_env: dict[str, str]) -> None:
-        logger.info("Deploying preview project=%s", compose_project)
+        logger.info("Deploying compose project=%s", compose_project)
         self._run(
             [
                 self.config.deployment.compose_bin,
@@ -62,71 +91,132 @@ class Deployer:
             env=extra_env,
         )
 
-    def _compose_down(self, compose_project: str) -> None:
-        logger.info("Removing preview project=%s", compose_project)
-        self._run(
-            [
-                self.config.deployment.compose_bin,
-                "compose",
-                "-p",
-                compose_project,
-                "-f",
-                self.config.deployment.compose_file,
-                "down",
-                "-v",
-                "--remove-orphans",
-            ]
-        )
+    def _compose_down(self, compose_project: str, remove_volumes: bool) -> None:
+        logger.info("Stopping compose project=%s", compose_project)
+        argv = [
+            self.config.deployment.compose_bin,
+            "compose",
+            "-p",
+            compose_project,
+            "-f",
+            self.config.deployment.compose_file,
+            "down",
+        ]
+        if remove_volumes:
+            argv.append("-v")
+        argv.append("--remove-orphans")
+        self._run(argv)
 
-    def _seed(self, compose_project: str) -> None:
-        if not self.config.preview.seed_command:
+    def _seed(self, command_template: list[str], compose_project: str) -> None:
+        if not command_template:
             return
-
         command = [
             part.format(
                 compose_project=compose_project,
                 compose_file=self.config.deployment.compose_file,
             )
-            for part in self.config.preview.seed_command
+            for part in command_template
         ]
-        logger.info("Seeding preview project=%s", compose_project)
+        logger.info("Seeding compose project=%s", compose_project)
         self._run(command)
 
-    def deploy_preview(self, pr: PullRequestInfo) -> DeployedPreview:
+    def deploy_review(self, pr: PullRequestInfo) -> DeployedReview:
+        preview = self._preview_config()
         compose_project = self.compose_project_name(pr.number)
         hostname = self.hostname_for_pr(pr.number)
-        image = self.image_for_pr(pr.number, pr.head_sha)
-        data_dir = self.data_dir_for_pr(pr.number)
-
-        if self.config.preview.reset_data_on_redeploy and Path(data_dir).exists():
-            shutil.rmtree(data_dir)
+        image = self.review_image_for_pr(pr.number, pr.head_sha)
+        data_dir = Path(self.data_dir_for_pr(pr.number))
+        sqlite_path = self.sqlite_path_for_pr(pr.number)
+        is_first_creation = not data_dir.exists()
 
         ensure_dir(data_dir)
-
         extra_env = {
             "APP_IMAGE": image,
             "APP_HOSTNAME": hostname,
-            "APP_DATA_DIR": data_dir,
-            "APP_SQLITE_PATH": self.sqlite_path_for_pr(pr.number),
+            "APP_DATA_DIR": str(data_dir),
+            "APP_SQLITE_PATH": sqlite_path,
             "TRAEFIK_ROUTER": compose_project,
             "TRAEFIK_SERVICE": compose_project,
             "TRAEFIK_CERTRESOLVER": self.config.traefik.certresolver,
         }
-
         self._compose_up(compose_project, extra_env)
-        self._seed(compose_project)
+        if is_first_creation:
+            self._seed(preview.seed_command, compose_project)
 
-        return DeployedPreview(
+        return DeployedReview(
             pr=pr.number,
             sha=pr.head_sha,
             compose_project=compose_project,
             hostname=hostname,
-            data_dir=data_dir,
+            data_dir=str(data_dir),
+            sqlite_path=sqlite_path,
             image=image,
         )
 
-    def remove_preview(self, deployed: DeployedPreview) -> None:
+    def remove_review(self, deployed: DeployedReview) -> None:
         try:
-            self._compose_down(deployed.compose_project)
+            self._compose_down(deployed.compose_project, remove_volumes=True)
         finally:
             shutil.rmtree(deployed.data_dir, ignore_errors=True)
+
+    def deploy_production(self, sha: str, previous: DeployedProduction | None) -> DeployedProduction:
+        production = self._production_config()
+        compose_project = self._production_project_name()
+        hostname = self._production_hostname()
+        image = self.production_image_for_sha(sha)
+        data_dir = Path(production.data_dir)
+        sqlite_path = Path(production.sqlite_path)
+        sqlite_existed = sqlite_path.exists()
+
+        ensure_dir(data_dir)
+        if previous is not None:
+            self._compose_down(compose_project, remove_volumes=False)
+            self._backup_sqlite(sqlite_path)
+
+        extra_env = {
+            "APP_IMAGE": image,
+            "APP_HOSTNAME": hostname,
+            "APP_DATA_DIR": str(data_dir),
+            "APP_SQLITE_PATH": str(sqlite_path),
+            "TRAEFIK_ROUTER": compose_project,
+            "TRAEFIK_SERVICE": compose_project,
+            "TRAEFIK_CERTRESOLVER": self.config.traefik.certresolver,
+        }
+        self._compose_up(compose_project, extra_env)
+        if not sqlite_existed:
+            self._seed(production.seed_command, compose_project)
+
+        return DeployedProduction(
+            sha=sha,
+            compose_project=compose_project,
+            hostname=hostname,
+            data_dir=str(data_dir),
+            sqlite_path=str(sqlite_path),
+            image=image,
+            branch=production.branch,
+        )
+
+    def _backup_sqlite(self, sqlite_path: Path) -> None:
+        if not sqlite_path.exists():
+            return
+        production = self._production_config()
+        backup_dir = Path(production.backup_dir)
+        ensure_dir(backup_dir)
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        backup_path = backup_dir / f"{sqlite_path.stem}-{timestamp}{sqlite_path.suffix}"
+        shutil.copy2(sqlite_path, backup_path)
+        backups = sorted(backup_dir.glob(f"{sqlite_path.stem}-*{sqlite_path.suffix}"), reverse=True)
+        for stale_backup in backups[production.backup_keep :]:
+            stale_backup.unlink()
+
+    def _production_project_name(self) -> str:
+        project_name = self.config.deployment.production_project_name
+        if project_name is None:
+            raise RuntimeError("production_project_name is required for production deployments")
+        return project_name
+
+    def _production_hostname(self) -> str:
+        hostname = self.config.deployment.production_hostname
+        if hostname is None:
+            raise RuntimeError("production_hostname is required for production deployments")
+        return hostname

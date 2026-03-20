@@ -30,16 +30,32 @@ class GitHubClient:
         repo = self.config.github.repo
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
         params = {"state": "open", "per_page": 100}
+        response = self._get(url, params=params)
+        return self._parse_pull_requests(response.json())
 
+    def get_branch_head_sha(self, branch: str) -> str:
+        owner = self.config.github.owner
+        repo = self.config.github.repo
+        url = f"{self.base_url}/repos/{owner}/{repo}/branches/{branch}"
+        response = self._get(url)
+        payload: dict[str, Any] = response.json()
+        return str(payload["commit"]["sha"])
+
+    def _get(self, url: str, params: dict[str, Any] | None = None) -> httpx.Response:
+        request_kwargs = {
+            "params": params,
+            "headers": self.headers,
+            "timeout": 30.0,
+        }
         if self._client is not None:
-            response = self._client.get(url, params=params, headers=self.headers, timeout=30.0)
+            response = self._client.get(url, **request_kwargs)
             response.raise_for_status()
-            return self._parse_pull_requests(response.json())
+            return response
 
         with httpx.Client() as client:
-            response = client.get(url, params=params, headers=self.headers, timeout=30.0)
+            response = client.get(url, **request_kwargs)
             response.raise_for_status()
-            return self._parse_pull_requests(response.json())
+            return response
 
     @staticmethod
     def _parse_pull_requests(data: Iterable[dict[str, Any]]) -> list[PullRequestInfo]:

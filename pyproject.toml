@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webhooker"
-version = "0.2.0"
-description = "Reusable PR preview deployment reconciler for Docker Compose"
+version = "0.3.0"
+description = "Reusable PR review and production deployment reconciler for Docker Compose"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -18,10 +18,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "black>=24.8",
   "mypy>=1.11",
   "pytest>=8.3",
   "pytest-cov>=5.0",
-  "ruff>=0.6",
 ]
 
 [project.scripts]
@@ -38,12 +38,9 @@ include = ["webhooker*"]
 addopts = "--cov=webhooker --cov-report=term-missing --cov-fail-under=95"
 testpaths = ["tests"]
 
-[tool.ruff]
+[tool.black]
 line-length = 100
-target-version = "py314"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+target-version = ["py314"]
 
 [tool.mypy]
 python_version = "3.14"

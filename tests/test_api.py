@@ -27,11 +27,11 @@ def test_healthz(config_dir: Path) -> None:
 
 
 
-def test_wake_endpoint_accepts_valid_request(
+def test_wake_endpoint_accepts_valid_review_request(
     config_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    wake_file = Path("/tmp/wake")
+    wake_file = Path("/tmp/review-wake")
     if wake_file.exists():
         wake_file.unlink()
 
@@ -40,7 +40,7 @@ def test_wake_endpoint_accepts_valid_request(
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "supersecret")
 
     response = client.post(
-        "/github/demo/wake",
+        "/github/review-demo/wake",
         content=body,
         headers={
             "X-GitHub-Event": "pull_request",
@@ -65,7 +65,7 @@ def test_wake_endpoint_rejects_bad_signature(
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "supersecret")
 
     response = client.post(
-        "/github/demo/wake",
+        "/github/review-demo/wake",
         content=b"{}",
         headers={
             "X-GitHub-Event": "pull_request",
@@ -86,7 +86,7 @@ def test_wake_endpoint_rejects_repository_mismatch(
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "supersecret")
 
     response = client.post(
-        "/github/demo/wake",
+        "/github/review-demo/wake",
         content=body,
         headers={
             "X-GitHub-Event": "pull_request",
@@ -108,7 +108,7 @@ def test_wake_endpoint_ignores_unexpected_event(
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "supersecret")
 
     response = client.post(
-        "/github/demo/wake",
+        "/github/review-demo/wake",
         content=body,
         headers={
             "X-GitHub-Event": "issues",
@@ -121,6 +121,7 @@ def test_wake_endpoint_ignores_unexpected_event(
     assert response.json() == {"status": "ignored", "reason": "event type"}
 
 
+
 def test_wake_endpoint_rejects_invalid_json(
     config_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -130,7 +131,7 @@ def test_wake_endpoint_rejects_invalid_json(
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", "supersecret")
 
     response = client.post(
-        "/github/demo/wake",
+        "/github/review-demo/wake",
         content=body,
         headers={
             "X-GitHub-Event": "pull_request",
@@ -140,6 +141,7 @@ def test_wake_endpoint_rejects_invalid_json(
     )
 
     assert response.status_code == 400
+
 
 
 def test_wake_endpoint_rejects_unknown_project(
