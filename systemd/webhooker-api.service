@@ -1,0 +1,17 @@
+[Unit]
+Description=webhooker API
+After=network.target
+
+[Service]
+Type=simple
+User=webhooker
+Group=webhooker
+WorkingDirectory=/opt/webhooker
+Environment=GITHUB_TOKEN=replace_me
+Environment=GITHUB_WEBHOOK_SECRET=replace_me
+ExecStart=/opt/webhooker/.venv/bin/webhooker-api --config-dir /etc/webhooker/projects --host 127.0.0.1 --port 9100
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

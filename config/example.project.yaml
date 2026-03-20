@@ -1,0 +1,57 @@
+project_id: example-review
+
+github:
+  owner: your-github-user-or-org
+  repo: example-app
+  token_env: GITHUB_TOKEN
+  webhook_secret_env: GITHUB_WEBHOOK_SECRET
+  required_event_types:
+    - pull_request
+    - ping
+
+deployment:
+  mode: review
+  compose_file: /opt/example-app/deploy/compose.review.yml
+  compose_bin: docker
+  working_directory: /opt/example-app/deploy
+  project_name_prefix: example-app-pr-
+  preview_base_domain: review.example.com
+  hostname_template: "pr-{pr}.review.example.com"
+
+image:
+  registry: ghcr.io
+  repository: your-github-user-or-org/example-app
+  tag_template: "pr-{pr}-{sha7}"
+
+preview:
+  base_dir: /srv/webhooker/reviews/example-app
+  data_dir_template: "/srv/webhooker/reviews/example-app/pr-{pr}"
+  sqlite_path_template: "/srv/webhooker/reviews/example-app/pr-{pr}/app.db"
+  seed_command:
+    - docker
+    - compose
+    - -p
+    - "{compose_project}"
+    - -f
+    - "/opt/example-app/deploy/compose.review.yml"
+    - exec
+    - -T
+    - app
+    - python
+    - -m
+    - example_app.seed_demo_data
+
+reconcile:
+  poll_interval_seconds: 600
+  cleanup_closed_prs: true
+  redeploy_on_sha_change: true
+
+traefik:
+  enable_labels: true
+  certresolver: letsencrypt
+
+state:
+  state_file: /var/lib/webhooker/state/example-review.json
+
+wake:
+  wake_file: /var/lib/webhooker/wake/example-review
