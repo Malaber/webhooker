@@ -1,4 +1,4 @@
 ---
 collections:
-  - name: https://github.com/Malaber/webhooker/releases/download/v0.3.0/malaber-webhooker-0.3.0.tar.gz
+  - name: https://github.com/Malaber/webhooker/releases/download/vX.Y.Z/malaber-webhooker-X.Y.Z.tar.gz
     type: url

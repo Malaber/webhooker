@@ -7,13 +7,14 @@ from json import JSONDecodeError
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from webhooker import __version__
 from webhooker.config import load_project_configs
 from webhooker.security import verify_github_signature
 from webhooker.wake import touch_wake_file
 
 
 def create_app(config_dir: str) -> FastAPI:
-    app = FastAPI(title="webhooker", version="0.2.0")
+    app = FastAPI(title="webhooker", version=__version__)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

@@ -33,7 +33,7 @@ Direct install example:
 
 ```bash
 ansible-galaxy collection install \
-  https://github.com/Malaber/webhooker/releases/download/v0.3.0/malaber-webhooker-0.3.0.tar.gz
+  https://github.com/Malaber/webhooker/releases/download/vX.Y.Z/malaber-webhooker-X.Y.Z.tar.gz
 ```
 
 `requirements.yml` example:
@@ -41,11 +41,11 @@ ansible-galaxy collection install \
 ```yaml
 ---
 collections:
-  - name: https://github.com/Malaber/webhooker/releases/download/v0.3.0/malaber-webhooker-0.3.0.tar.gz
+  - name: https://github.com/Malaber/webhooker/releases/download/vX.Y.Z/malaber-webhooker-X.Y.Z.tar.gz
     type: url
 ```
 
-The collection version tracks the GitHub release tag. For example, tag `v0.3.0` publishes `malaber-webhooker-0.3.0.tar.gz`.
+The collection version tracks the GitHub release tag. For example, tag `vX.Y.Z` publishes `malaber-webhooker-X.Y.Z.tar.gz`.
 
 ## Generic Example
 
