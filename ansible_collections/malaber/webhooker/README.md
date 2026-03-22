@@ -47,6 +47,66 @@ collections:
 
 The collection version tracks the GitHub release tag. For example, tag `vX.Y.Z` publishes `malaber-webhooker-X.Y.Z.tar.gz`.
 
+## Using In Another Repo
+
+The normal consumption pattern is:
+
+1. Add the collection tarball URL to your infra repo's `requirements.yml`.
+2. Put your app deployment bundle files in that infra repo under `files/`.
+3. Add a playbook that includes `malaber.webhooker.webhooker`.
+4. Add one non-secret vars file that defines `webhooker_env`, `webhooker_projects`, `webhooker_managed_files`, and `webhooker_worker_extra_mounts`.
+5. Add one secret vars file, usually encrypted with Ansible Vault, for `webhooker_secret_env_files` values.
+6. Run the playbook against the host group that should run `webhooker`.
+
+Suggested consuming repo layout:
+
+```text
+infra-repo/
+├── requirements.yml
+├── inventory/
+│   └── hosts.ini
+├── playbooks/
+│   └── deploy-webhooker.yml
+├── vars/
+│   ├── webhooker.yml
+│   └── webhooker.secrets.yml
+└── files/
+    └── example-app/
+        └── deploy/
+            └── webhooker/
+                ├── compose.review.yml
+                ├── compose.production.yml
+                └── env/
+                    ├── review.common.env
+                    └── production.common.env
+```
+
+Install the collection:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
+
+Create a playbook:
+
+```yaml
+---
+- name: Deploy webhooker
+  hosts: webhooker_hosts
+  become: true
+  roles:
+    - role: malaber.webhooker.webhooker
+```
+
+Run it:
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy-webhooker.yml \
+  -e @vars/webhooker.yml \
+  -e @vars/webhooker.secrets.yml \
+  -l webhooker_hosts
+```
+
 ## Generic Example
 
 A generic consumer layout lives under [examples/generic](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/examples/generic).

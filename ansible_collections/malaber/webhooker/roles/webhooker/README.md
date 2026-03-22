@@ -125,6 +125,8 @@ The role always adds these mounts by default for the worker:
 
 Example files also live under [examples/generic](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/examples/generic).
 
+This example assumes the consuming infra repo carries the app bundle files and the vars files, while this collection only provides the reusable role.
+
 Playbook:
 
 ```yaml
@@ -267,6 +269,14 @@ webhooker_github_webhook_secret: replace-me
 example_app_review_secret_key: replace-me
 example_app_production_secret_key: replace-me
 ```
+
+What the consuming repo needs to provide:
+
+- `requirements.yml` pointing at the GitHub Release tarball for `malaber.webhooker`
+- a playbook that includes `malaber.webhooker.webhooker`
+- controller-side app bundle files referenced by `webhooker_managed_files`
+- non-secret vars for `webhooker_env`, `webhooker_projects`, `webhooker_managed_files`, and `webhooker_worker_extra_mounts`
+- secret vars for the values rendered by `webhooker_secret_env_files`
 
 Example command:
 
