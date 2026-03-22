@@ -587,6 +587,8 @@ The GitHub Actions workflow:
 3. builds the production Docker image
 4. publishes the image to GHCR on successful pushes to `main` or version tags
 
+Tagged releases also build and publish a versioned Ansible Galaxy collection tarball for the reusable `malaber.webhooker.webhooker` role. The collection source lives under `ansible_collections/malaber/webhooker/`, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
+
 ## Troubleshooting
 
 - **401 from webhook**: confirm the GitHub secret matches and `X-Hub-Signature-256` is present

@@ -1,0 +1,4 @@
+---
+collections:
+  - name: https://github.com/Malaber/webhooker/releases/download/v0.3.0/malaber-webhooker-0.3.0.tar.gz
+    type: url

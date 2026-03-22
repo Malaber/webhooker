@@ -1,0 +1,132 @@
+---
+- name: Validate required webhooker variables
+  ansible.builtin.assert:
+    that:
+      - webhooker_deploy_path | length > 0
+      - webhooker_compose_project_name | length > 0
+      - webhooker_config_dir | length > 0
+      - webhooker_env_dir | length > 0
+      - webhooker_state_dir | length > 0
+      - webhooker_wake_dir | length > 0
+      - webhooker_image | length > 0
+    fail_msg: Required webhooker variables are missing.
+
+- name: Validate webhooker projects
+  ansible.builtin.assert:
+    that:
+      - item.filename is defined
+      - item.content is defined
+      - item.filename is string
+      - (item.filename | regex_search('\\.ya?ml$')) is not none
+    fail_msg: Each webhooker project must define filename and content, and filename must end in .yaml or .yml.
+  loop: "{{ webhooker_projects }}"
+  loop_control:
+    label: "{{ item.filename | default('<missing>') }}"
+
+- name: Validate webhooker managed files
+  ansible.builtin.assert:
+    that:
+      - item.src is defined
+      - item.dest is defined
+    fail_msg: Each webhooker_managed_files entry must define src and dest.
+  loop: "{{ webhooker_managed_files }}"
+  loop_control:
+    label: "{{ item.dest | default('<missing>') }}"
+
+- name: Validate webhooker secret env files
+  ansible.builtin.assert:
+    that:
+      - item.path is defined
+      - item.content is defined
+    fail_msg: Each webhooker_secret_env_files entry must define path and content.
+  loop: "{{ webhooker_secret_env_files }}"
+  loop_control:
+    label: "{{ item.path | default('<missing>') }}"
+
+- name: Create standard webhooker directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ webhooker_deploy_path }}"
+    - "{{ webhooker_config_dir }}"
+    - "{{ webhooker_env_dir }}"
+    - "{{ webhooker_state_dir }}"
+    - "{{ webhooker_wake_dir }}"
+
+- name: Create parent directories for managed files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ webhooker_managed_files | map(attribute='dest') | map('dirname') | unique | list }}"
+  when: webhooker_managed_files | length > 0
+
+- name: Create parent directories for secret env files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ webhooker_secret_env_files | map(attribute='path') | map('dirname') | unique | list }}"
+  when: webhooker_secret_env_files | length > 0
+
+- name: Render webhooker env file
+  ansible.builtin.template:
+    src: envfile.j2
+    dest: "{{ webhooker_env_dir }}/webhooker.env"
+    mode: "0600"
+  no_log: true
+
+- name: Render webhooker project files
+  ansible.builtin.template:
+    src: project.yaml.j2
+    dest: "{{ webhooker_config_dir }}/{{ item.filename }}"
+    mode: "0644"
+  loop: "{{ webhooker_projects }}"
+  loop_control:
+    label: "{{ item.filename }}"
+
+- name: Render secret env files
+  ansible.builtin.template:
+    src: app-envfile.j2
+    dest: "{{ item.path }}"
+    mode: "{{ item.mode | default('0600') }}"
+    owner: "{{ item.owner | default(omit) }}"
+    group: "{{ item.group | default(omit) }}"
+  loop: "{{ webhooker_secret_env_files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  no_log: true
+
+- name: Copy managed files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode | default('0644') }}"
+    owner: "{{ item.owner | default(omit) }}"
+    group: "{{ item.group | default(omit) }}"
+  loop: "{{ webhooker_managed_files }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Render webhooker compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ webhooker_deploy_path }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Pull webhooker image
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.yml pull
+  args:
+    chdir: "{{ webhooker_deploy_path }}"
+  when: webhooker_compose_pull
+  changed_when: false
+
+- name: Start webhooker stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.yml up -d --remove-orphans
+  args:
+    chdir: "{{ webhooker_deploy_path }}"
+  changed_when: false

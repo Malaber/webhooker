@@ -1,0 +1,23 @@
+namespace: malaber
+name: webhooker
+version: 0.3.0
+readme: README.md
+authors:
+  - Malaber
+description: Deploy webhooker with Docker Compose and manage webhooker project definitions.
+license:
+  - MIT
+tags:
+  - docker
+  - deployment
+  - github
+  - webhook
+repository: https://github.com/Malaber/webhooker
+documentation: https://github.com/Malaber/webhooker
+homepage: https://github.com/Malaber/webhooker
+issues: https://github.com/Malaber/webhooker/issues
+build_ignore:
+  - .DS_Store
+  - "*.pyc"
+  - "*.pyo"
+  - __pycache__

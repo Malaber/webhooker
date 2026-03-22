@@ -1,0 +1,21 @@
+---
+webhooker_deploy_path: /opt/webhooker
+webhooker_compose_project_name: webhooker
+
+webhooker_config_dir: /etc/webhooker/projects
+webhooker_env_dir: /etc/webhooker/env
+webhooker_state_dir: /var/lib/webhooker/state
+webhooker_wake_dir: /var/lib/webhooker/wake
+
+webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
+webhooker_api_bind_address: 127.0.0.1
+webhooker_api_port: 9100
+webhooker_worker_sleep_seconds: 60
+
+webhooker_env: {}
+webhooker_projects: []
+webhooker_worker_extra_mounts: []
+webhooker_managed_files: []
+webhooker_secret_env_files: []
+
+webhooker_compose_pull: true

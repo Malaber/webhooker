@@ -1,0 +1,43 @@
+name: {{ webhooker_compose_project_name | to_json }}
+
+services:
+  webhooker-api:
+    image: {{ webhooker_image | to_json }}
+    restart: unless-stopped
+    command:
+      - webhooker-api
+      - --config-dir
+      - {{ webhooker_config_dir | to_json }}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - {{ (webhooker_api_port | string) | to_json }}
+    env_file:
+      - {{ (webhooker_env_dir ~ '/webhooker.env') | to_json }}
+    volumes:
+      - {{ (webhooker_config_dir ~ ':' ~ webhooker_config_dir ~ ':ro') | to_json }}
+      - {{ (webhooker_wake_dir ~ ':' ~ webhooker_wake_dir) | to_json }}
+    ports:
+      - {{ ((webhooker_api_bind_address ~ ':' ~ (webhooker_api_port | string) ~ ':' ~ (webhooker_api_port | string))) | to_json }}
+
+  webhooker-worker:
+    image: {{ webhooker_image | to_json }}
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          webhooker-worker --config-dir {{ webhooker_config_dir }}
+          sleep {{ webhooker_worker_sleep_seconds }}
+        done
+    env_file:
+      - {{ (webhooker_env_dir ~ '/webhooker.env') | to_json }}
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - {{ (webhooker_config_dir ~ ':' ~ webhooker_config_dir ~ ':ro') | to_json }}
+      - {{ (webhooker_state_dir ~ ':' ~ webhooker_state_dir) | to_json }}
+      - {{ (webhooker_wake_dir ~ ':' ~ webhooker_wake_dir) | to_json }}
+{% for mount in webhooker_worker_extra_mounts %}
+      - {{ mount | to_json }}
+{% endfor %}
