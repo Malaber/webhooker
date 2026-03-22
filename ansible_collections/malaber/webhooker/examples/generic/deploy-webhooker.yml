@@ -1,6 +1,6 @@
 ---
 - name: Deploy webhooker
-  hosts: minidoener
+  hosts: webhooker_hosts
   become: true
   roles:
     - role: malaber.webhooker.webhooker

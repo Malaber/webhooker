@@ -14,10 +14,10 @@ The role is responsible for:
 - rendering `/etc/webhooker/env/webhooker.env`
 - rendering one or more `webhooker` project YAML files under `/etc/webhooker/projects/`
 - copying app deployment bundle files such as Compose templates and non-secret env files onto the host
-- rendering app secret env files such as `/etc/listerine/review.secrets.env`
+- rendering app secret env files such as `/etc/example-app/review.secrets.env`
 - adding extra worker bind mounts for every host path the worker must read or write
 
-The role is intentionally generic. It does not hardcode Listerine or any other app.
+The role is intentionally generic. App-specific deployment details belong in the consuming infra repo.
 
 ## Prerequisites
 
@@ -47,9 +47,9 @@ collections:
 
 The collection version tracks the GitHub release tag. For example, tag `v0.3.0` publishes `malaber-webhooker-0.3.0.tar.gz`.
 
-## Listerine Example
+## Generic Example
 
-A complete example consumer layout lives under [examples/listerine](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/examples/listerine).
+A generic consumer layout lives under [examples/generic](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/examples/generic).
 
 Typical consumption flow in another infra repo:
 
@@ -64,9 +64,9 @@ Typical consumption flow in another infra repo:
 Example command:
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy-webhooker.yml -l minidoener
+ansible-playbook -i inventory/hosts.ini playbooks/deploy-webhooker.yml -l webhooker_hosts
 ```
 
 ## Role Documentation
 
-See [roles/webhooker/README.md](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/roles/webhooker/README.md) for variables, role behavior, and the full Listerine review + production example.
+See [roles/webhooker/README.md](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/roles/webhooker/README.md) for variables, role behavior, and a generic review + production example.

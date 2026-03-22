@@ -89,7 +89,7 @@
 
 - name: Render secret env files
   ansible.builtin.template:
-    src: app-envfile.j2
+    src: secret-envfile.j2
     dest: "{{ item.path }}"
     mode: "{{ item.mode | default('0600') }}"
     owner: "{{ item.owner | default(omit) }}"

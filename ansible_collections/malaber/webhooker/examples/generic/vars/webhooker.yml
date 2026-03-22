@@ -1,0 +1,117 @@
+---
+webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
+
+webhooker_env:
+  GITHUB_TOKEN: "{{ webhooker_github_token }}"
+  GITHUB_WEBHOOK_SECRET: "{{ webhooker_github_webhook_secret }}"
+
+webhooker_worker_extra_mounts:
+  - /opt/example-app/deploy/webhooker:/opt/example-app/deploy/webhooker:ro
+  - /etc/example-app:/etc/example-app:ro
+  - /srv/webhooker:/srv/webhooker
+
+webhooker_managed_files:
+  - src: files/example-app/deploy/webhooker/compose.review.yml
+    dest: /opt/example-app/deploy/webhooker/compose.review.yml
+    mode: "0644"
+  - src: files/example-app/deploy/webhooker/compose.production.yml
+    dest: /opt/example-app/deploy/webhooker/compose.production.yml
+    mode: "0644"
+  - src: files/example-app/deploy/webhooker/env/review.common.env
+    dest: /opt/example-app/deploy/webhooker/env/review.common.env
+    mode: "0644"
+  - src: files/example-app/deploy/webhooker/env/production.common.env
+    dest: /opt/example-app/deploy/webhooker/env/production.common.env
+    mode: "0644"
+
+webhooker_secret_env_files:
+  - path: /etc/example-app/review.secrets.env
+    mode: "0600"
+    content:
+      SECRET_KEY: "{{ example_app_review_secret_key }}"
+  - path: /etc/example-app/production.secrets.env
+    mode: "0600"
+    content:
+      SECRET_KEY: "{{ example_app_production_secret_key }}"
+
+webhooker_projects:
+  - filename: example-app-review.yaml
+    content:
+      project_id: example-app-review
+      github:
+        owner: your-github-user-or-org
+        repo: example-app
+        token_env: GITHUB_TOKEN
+        webhook_secret_env: GITHUB_WEBHOOK_SECRET
+        required_event_types:
+          - pull_request
+          - ping
+      deployment:
+        mode: review
+        compose_file: /opt/example-app/deploy/webhooker/compose.review.yml
+        compose_bin: docker
+        working_directory: /opt/example-app/deploy/webhooker
+        project_name_prefix: example-app-pr-
+        preview_base_domain: review.example.com
+        hostname_template: pr-{pr}.review.example.com
+      image:
+        registry: ghcr.io
+        repository: your-github-user-or-org/example-app
+        tag_template: pr-{pr}-{sha7}
+      preview:
+        base_dir: /srv/webhooker/reviews/example-app
+        data_dir_template: /srv/webhooker/reviews/example-app/pr-{pr}/data
+        sqlite_path_template: /srv/webhooker/reviews/example-app/pr-{pr}/data/app.db
+      reconcile:
+        poll_interval_seconds: 60
+        cleanup_closed_prs: true
+        redeploy_on_sha_change: true
+      traefik:
+        enable_labels: true
+        certresolver: letsencrypt
+      state:
+        state_file: /var/lib/webhooker/state/example-app-review.json
+      wake:
+        wake_file: /var/lib/webhooker/wake/example-app-review.wake
+
+  - filename: example-app-production.yaml
+    content:
+      project_id: example-app-production
+      github:
+        owner: your-github-user-or-org
+        repo: example-app
+        token_env: GITHUB_TOKEN
+        webhook_secret_env: GITHUB_WEBHOOK_SECRET
+        required_event_types:
+          - push
+          - ping
+      deployment:
+        mode: production
+        compose_file: /opt/example-app/deploy/webhooker/compose.production.yml
+        compose_bin: docker
+        working_directory: /opt/example-app/deploy/webhooker
+        project_name_prefix: example-app-
+        production_project_name: example-app
+        production_hostname: app.example.com
+      image:
+        registry: ghcr.io
+        repository: your-github-user-or-org/example-app
+        tag_template: unused
+        production_tag_template: sha-{sha7}
+      production:
+        branch: main
+        data_dir: /srv/webhooker/production/example-app/data
+        sqlite_path: /srv/webhooker/production/example-app/data/app.db
+        backup_dir: /srv/webhooker/production/example-app/backups
+        backup_keep: 3
+      reconcile:
+        poll_interval_seconds: 60
+        cleanup_closed_prs: false
+        redeploy_on_sha_change: true
+      traefik:
+        enable_labels: true
+        certresolver: letsencrypt
+      state:
+        state_file: /var/lib/webhooker/state/example-app-production.json
+      wake:
+        wake_file: /var/lib/webhooker/wake/example-app-production.wake

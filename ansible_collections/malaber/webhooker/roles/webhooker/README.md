@@ -60,8 +60,8 @@ Example:
 
 ```yaml
 webhooker_managed_files:
-  - src: files/listerine/deploy/webhooker/compose.review.yml
-    dest: /opt/listerine/deploy/webhooker/compose.review.yml
+  - src: files/example-app/deploy/webhooker/compose.review.yml
+    dest: /opt/example-app/deploy/webhooker/compose.review.yml
     mode: "0644"
 ```
 
@@ -83,10 +83,10 @@ Example:
 
 ```yaml
 webhooker_secret_env_files:
-  - path: /etc/listerine/review.secrets.env
+  - path: /etc/example-app/review.secrets.env
     mode: "0600"
     content:
-      SECRET_KEY: "{{ listerine_review_secret_key }}"
+      SECRET_KEY: "{{ example_app_review_secret_key }}"
 ```
 
 Each file is rendered as:
@@ -103,8 +103,8 @@ Example:
 
 ```yaml
 webhooker_worker_extra_mounts:
-  - /opt/listerine/deploy/webhooker:/opt/listerine/deploy/webhooker:ro
-  - /etc/listerine:/etc/listerine:ro
+  - /opt/example-app/deploy/webhooker:/opt/example-app/deploy/webhooker:ro
+  - /etc/example-app:/etc/example-app:ro
   - /srv/webhooker:/srv/webhooker
 ```
 
@@ -121,16 +121,16 @@ The role always adds these mounts by default for the worker:
 - The role always runs `docker compose up -d --remove-orphans`, which is safe on repeated runs.
 - The role marks the Docker Compose command tasks as unchanged to keep repeat runs predictable while still ensuring the stack is reconciled.
 
-## Full Listerine Example
+## Generic Example
 
-Example files also live under [examples/listerine](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/examples/listerine).
+Example files also live under [examples/generic](/Users/daniel/Git/Github.com/Malaber/webhooker/ansible_collections/malaber/webhooker/examples/generic).
 
 Playbook:
 
 ```yaml
 ---
 - name: Deploy webhooker
-  hosts: minidoener
+  hosts: webhooker_hosts
   become: true
   roles:
     - role: malaber.webhooker.webhooker
@@ -147,41 +147,41 @@ webhooker_env:
   GITHUB_WEBHOOK_SECRET: "{{ webhooker_github_webhook_secret }}"
 
 webhooker_worker_extra_mounts:
-  - /opt/listerine/deploy/webhooker:/opt/listerine/deploy/webhooker:ro
-  - /etc/listerine:/etc/listerine:ro
+  - /opt/example-app/deploy/webhooker:/opt/example-app/deploy/webhooker:ro
+  - /etc/example-app:/etc/example-app:ro
   - /srv/webhooker:/srv/webhooker
 
 webhooker_managed_files:
-  - src: files/listerine/deploy/webhooker/compose.review.yml
-    dest: /opt/listerine/deploy/webhooker/compose.review.yml
+  - src: files/example-app/deploy/webhooker/compose.review.yml
+    dest: /opt/example-app/deploy/webhooker/compose.review.yml
     mode: "0644"
-  - src: files/listerine/deploy/webhooker/compose.production.yml
-    dest: /opt/listerine/deploy/webhooker/compose.production.yml
+  - src: files/example-app/deploy/webhooker/compose.production.yml
+    dest: /opt/example-app/deploy/webhooker/compose.production.yml
     mode: "0644"
-  - src: files/listerine/deploy/webhooker/env/review.common.env
-    dest: /opt/listerine/deploy/webhooker/env/review.common.env
+  - src: files/example-app/deploy/webhooker/env/review.common.env
+    dest: /opt/example-app/deploy/webhooker/env/review.common.env
     mode: "0644"
-  - src: files/listerine/deploy/webhooker/env/production.common.env
-    dest: /opt/listerine/deploy/webhooker/env/production.common.env
+  - src: files/example-app/deploy/webhooker/env/production.common.env
+    dest: /opt/example-app/deploy/webhooker/env/production.common.env
     mode: "0644"
 
 webhooker_secret_env_files:
-  - path: /etc/listerine/review.secrets.env
+  - path: /etc/example-app/review.secrets.env
     mode: "0600"
     content:
-      SECRET_KEY: "{{ listerine_review_secret_key }}"
-  - path: /etc/listerine/production.secrets.env
+      SECRET_KEY: "{{ example_app_review_secret_key }}"
+  - path: /etc/example-app/production.secrets.env
     mode: "0600"
     content:
-      SECRET_KEY: "{{ listerine_production_secret_key }}"
+      SECRET_KEY: "{{ example_app_production_secret_key }}"
 
 webhooker_projects:
-  - filename: listerine-review.yaml
+  - filename: example-app-review.yaml
     content:
-      project_id: listerine-review
+      project_id: example-app-review
       github:
-        owner: Malaber
-        repo: listerine
+        owner: your-github-user-or-org
+        repo: example-app
         token_env: GITHUB_TOKEN
         webhook_secret_env: GITHUB_WEBHOOK_SECRET
         required_event_types:
@@ -189,38 +189,38 @@ webhooker_projects:
           - ping
       deployment:
         mode: review
-        compose_file: /opt/listerine/deploy/webhooker/compose.review.yml
+        compose_file: /opt/example-app/deploy/webhooker/compose.review.yml
         compose_bin: docker
-        working_directory: /opt/listerine/deploy/webhooker
-        project_name_prefix: listerine-pr-
-        preview_base_domain: pr.listerine.example.com
-        hostname_template: pr-{pr}.pr.listerine.example.com
+        working_directory: /opt/example-app/deploy/webhooker
+        project_name_prefix: example-app-pr-
+        preview_base_domain: review.example.com
+        hostname_template: pr-{pr}.review.example.com
       image:
         registry: ghcr.io
-        repository: malaber/listerine
+        repository: your-github-user-or-org/example-app
         tag_template: pr-{pr}-{sha7}
       preview:
-        base_dir: /srv/webhooker/reviews/listerine
-        data_dir_template: /srv/webhooker/reviews/listerine/pr-{pr}/data
-        sqlite_path_template: /srv/webhooker/reviews/listerine/pr-{pr}/data/listerine.db
+        base_dir: /srv/webhooker/reviews/example-app
+        data_dir_template: /srv/webhooker/reviews/example-app/pr-{pr}/data
+        sqlite_path_template: /srv/webhooker/reviews/example-app/pr-{pr}/data/app.db
       reconcile:
         poll_interval_seconds: 60
         cleanup_closed_prs: true
         redeploy_on_sha_change: true
       traefik:
         enable_labels: true
-        certresolver: lets-encr
+        certresolver: letsencrypt
       state:
-        state_file: /var/lib/webhooker/state/listerine-review.json
+        state_file: /var/lib/webhooker/state/example-app-review.json
       wake:
-        wake_file: /var/lib/webhooker/wake/listerine-review.wake
+        wake_file: /var/lib/webhooker/wake/example-app-review.wake
 
-  - filename: listerine-production.yaml
+  - filename: example-app-production.yaml
     content:
-      project_id: listerine-production
+      project_id: example-app-production
       github:
-        owner: Malaber
-        repo: listerine
+        owner: your-github-user-or-org
+        repo: example-app
         token_env: GITHUB_TOKEN
         webhook_secret_env: GITHUB_WEBHOOK_SECRET
         required_event_types:
@@ -228,22 +228,22 @@ webhooker_projects:
           - ping
       deployment:
         mode: production
-        compose_file: /opt/listerine/deploy/webhooker/compose.production.yml
+        compose_file: /opt/example-app/deploy/webhooker/compose.production.yml
         compose_bin: docker
-        working_directory: /opt/listerine/deploy/webhooker
-        project_name_prefix: listerine-
-        production_project_name: listerine
-        production_hostname: listerine.example.com
+        working_directory: /opt/example-app/deploy/webhooker
+        project_name_prefix: example-app-
+        production_project_name: example-app
+        production_hostname: app.example.com
       image:
         registry: ghcr.io
-        repository: malaber/listerine
+        repository: your-github-user-or-org/example-app
         tag_template: unused
         production_tag_template: sha-{sha7}
       production:
         branch: main
-        data_dir: /srv/webhooker/production/listerine/data
-        sqlite_path: /srv/webhooker/production/listerine/data/listerine.db
-        backup_dir: /srv/webhooker/production/listerine/backups
+        data_dir: /srv/webhooker/production/example-app/data
+        sqlite_path: /srv/webhooker/production/example-app/data/app.db
+        backup_dir: /srv/webhooker/production/example-app/backups
         backup_keep: 3
       reconcile:
         poll_interval_seconds: 60
@@ -251,11 +251,11 @@ webhooker_projects:
         redeploy_on_sha_change: true
       traefik:
         enable_labels: true
-        certresolver: lets-encr
+        certresolver: letsencrypt
       state:
-        state_file: /var/lib/webhooker/state/listerine-production.json
+        state_file: /var/lib/webhooker/state/example-app-production.json
       wake:
-        wake_file: /var/lib/webhooker/wake/listerine-production.wake
+        wake_file: /var/lib/webhooker/wake/example-app-production.wake
 ```
 
 Secret vars:
@@ -264,12 +264,12 @@ Secret vars:
 ---
 webhooker_github_token: replace-me
 webhooker_github_webhook_secret: replace-me
-listerine_review_secret_key: replace-me
-listerine_production_secret_key: replace-me
+example_app_review_secret_key: replace-me
+example_app_production_secret_key: replace-me
 ```
 
 Example command:
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy-webhooker.yml -l minidoener
+ansible-playbook -i inventory/hosts.ini playbooks/deploy-webhooker.yml -l webhooker_hosts
 ```
