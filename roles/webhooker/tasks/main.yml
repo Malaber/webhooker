@@ -48,6 +48,7 @@
     path: "{{ item }}"
     state: directory
     mode: "0755"
+  become: true
   loop:
     - "{{ webhooker_deploy_path }}"
     - "{{ webhooker_config_dir }}"
@@ -60,6 +61,7 @@
     path: "{{ item }}"
     state: directory
     mode: "0755"
+  become: true
   loop: "{{ webhooker_managed_files | map(attribute='dest') | map('dirname') | unique | list }}"
   when: webhooker_managed_files | length > 0
 
@@ -68,6 +70,7 @@
     path: "{{ item }}"
     state: directory
     mode: "0755"
+  become: true
   loop: "{{ webhooker_secret_env_files | map(attribute='path') | map('dirname') | unique | list }}"
   when: webhooker_secret_env_files | length > 0
 
@@ -76,6 +79,7 @@
     src: envfile.j2
     dest: "{{ webhooker_env_dir }}/webhooker.env"
     mode: "0600"
+  become: true
   no_log: true
 
 - name: Render webhooker project files
@@ -83,6 +87,7 @@
     src: project.yaml.j2
     dest: "{{ webhooker_config_dir }}/{{ item.filename }}"
     mode: "0644"
+  become: true
   loop: "{{ webhooker_projects }}"
   loop_control:
     label: "{{ item.filename }}"
@@ -94,6 +99,7 @@
     mode: "{{ item.mode | default('0600') }}"
     owner: "{{ item.owner | default(omit) }}"
     group: "{{ item.group | default(omit) }}"
+  become: true
   loop: "{{ webhooker_secret_env_files }}"
   loop_control:
     label: "{{ item.path }}"
@@ -106,6 +112,7 @@
     mode: "{{ item.mode | default('0644') }}"
     owner: "{{ item.owner | default(omit) }}"
     group: "{{ item.group | default(omit) }}"
+  become: true
   loop: "{{ webhooker_managed_files }}"
   loop_control:
     label: "{{ item.dest }}"
@@ -115,12 +122,14 @@
     src: docker-compose.yml.j2
     dest: "{{ webhooker_deploy_path }}/docker-compose.yml"
     mode: "0644"
+  become: true
 
 - name: Pull webhooker image
   ansible.builtin.command:
     cmd: docker compose -f docker-compose.yml pull
   args:
     chdir: "{{ webhooker_deploy_path }}"
+  become: true
   when: webhooker_compose_pull
   changed_when: false
 
@@ -129,4 +138,5 @@
     cmd: docker compose -f docker-compose.yml up -d --remove-orphans
   args:
     chdir: "{{ webhooker_deploy_path }}"
+  become: true
   changed_when: false

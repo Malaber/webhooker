@@ -7,7 +7,7 @@ By default, the role keeps `webhooker` itself under `/srv/docker-ansible/webhook
 ## Requirements
 
 - Docker and the Docker Compose plugin are already installed on the target host.
-- The playbook usually runs with `become: true` because the default paths live under `/opt`, `/etc`, `/var/lib`, and `/srv`.
+- The role uses privilege escalation for filesystem and Docker tasks because the default paths live under `/srv`.
 - The worker container needs bind mounts for every host path referenced by the app Compose files it will execute.
 
 ## Variables
