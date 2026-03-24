@@ -25,12 +25,15 @@ By default, the role keeps `webhooker` itself under `/srv/docker-ansible/webhook
 - `webhooker_api_port`: published API port. Default: `9100`
 - `webhooker_worker_sleep_seconds`: polling delay between worker runs inside the long-running worker container. Default: `60`
 - `webhooker_compose_pull`: whether the role runs `docker compose pull` before `up`. Default: `true`
+- `webhooker_container_uid`: numeric uid used by the unprivileged `webhooker` container user. Default: `"1000"`
+- `webhooker_container_gid`: numeric gid used by the unprivileged `webhooker` container user. Default: `"1000"`
 
 ### Runtime data
 
 - `webhooker_env`: dictionary rendered to `<webhooker_env_dir>/webhooker.env`
 - `webhooker_projects`: list of project definitions rendered to `<webhooker_config_dir>/<filename>`
 - `webhooker_worker_extra_mounts`: extra bind mounts added to the worker container
+- `webhooker_managed_directories`: host directories the role should create for app data or other writable mounts
 - `webhooker_managed_files`: controller-side files to copy to the target host
 - `webhooker_secret_env_files`: dotenv files rendered on the target host, usually from vaulted values
 
@@ -76,6 +79,26 @@ Each item supports:
 - `group`
 
 The role creates the parent directory for each destination before copying the file.
+
+## Managed Directories
+
+Use `webhooker_managed_directories` for host paths that must already exist and be writable by the unprivileged `webhooker` container user, especially review data, production data, state, and wake mounts.
+
+Example:
+
+```yaml
+webhooker_managed_directories:
+  - path: /srv/docker-ansible/webhooker/example-app/data/reviews
+    owner: "1000"
+    group: "1000"
+    mode: "0775"
+  - path: /srv/docker-ansible/webhooker/example-app/data/production
+    owner: "1000"
+    group: "1000"
+    mode: "0775"
+```
+
+If you change the container uid or gid, set `webhooker_container_uid` and `webhooker_container_gid` to match, and use those same numeric ids for any writable bind mounts you manage outside the role.
 
 ## Secret Env Files
 
@@ -150,10 +173,23 @@ webhooker_env:
   GITHUB_TOKEN: "{{ webhooker_github_token }}"
   GITHUB_WEBHOOK_SECRET: "{{ webhooker_github_webhook_secret }}"
 
+webhooker_container_uid: "1000"
+webhooker_container_gid: "1000"
+
 webhooker_worker_extra_mounts:
   - /srv/docker-ansible/webhooker/example-app/deploy:/srv/docker-ansible/webhooker/example-app/deploy:ro
   - /srv/docker-ansible/webhooker/example-app/secrets:/srv/docker-ansible/webhooker/example-app/secrets:ro
   - /srv/docker-ansible/webhooker/example-app/data:/srv/docker-ansible/webhooker/example-app/data
+
+webhooker_managed_directories:
+  - path: /srv/docker-ansible/webhooker/example-app/data/reviews
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
+    mode: "0775"
+  - path: /srv/docker-ansible/webhooker/example-app/data/production
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
+    mode: "0775"
 
 webhooker_managed_files:
   - src: files/example-app/deploy/webhooker/compose.review.yml

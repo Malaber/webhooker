@@ -33,6 +33,15 @@
   loop_control:
     label: "{{ item.dest | default('<missing>') }}"
 
+- name: Validate webhooker managed directories
+  ansible.builtin.assert:
+    that:
+      - item.path is defined
+    fail_msg: Each webhooker_managed_directories entry must define path.
+  loop: "{{ webhooker_managed_directories }}"
+  loop_control:
+    label: "{{ item.path | default('<missing>') }}"
+
 - name: Validate webhooker secret env files
   ansible.builtin.assert:
     that:
@@ -53,8 +62,37 @@
     - "{{ webhooker_deploy_path }}"
     - "{{ webhooker_config_dir }}"
     - "{{ webhooker_env_dir }}"
-    - "{{ webhooker_state_dir }}"
-    - "{{ webhooker_wake_dir }}"
+
+- name: Create writable webhooker runtime directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+  become: true
+  loop:
+    - path: "{{ webhooker_state_dir }}"
+      mode: "0775"
+      owner: "{{ webhooker_container_uid }}"
+      group: "{{ webhooker_container_gid }}"
+    - path: "{{ webhooker_wake_dir }}"
+      mode: "0775"
+      owner: "{{ webhooker_container_uid }}"
+      group: "{{ webhooker_container_gid }}"
+
+- name: Create managed directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode | default('0755') }}"
+    owner: "{{ item.owner | default(omit) }}"
+    group: "{{ item.group | default(omit) }}"
+  become: true
+  loop: "{{ webhooker_managed_directories }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: webhooker_managed_directories | length > 0
 
 - name: Create parent directories for managed files
   ansible.builtin.file:

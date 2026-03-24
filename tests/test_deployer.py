@@ -246,3 +246,64 @@ def test_backup_sqlite_returns_when_database_is_missing(
     deployer._backup_sqlite(missing_sqlite)
 
     assert not missing_sqlite.exists()
+
+
+def test_review_deploy_permission_error_explains_host_directory_requirement(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    def fake_ensure_dir(path: Path) -> None:
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr("webhooker.deployer.ensure_dir", fake_ensure_dir)
+
+    with pytest.raises(PermissionError, match="mounted host directory"):
+        deployer.deploy_review(PullRequestInfo(number=8, head_sha="abcdef123456", state="open"))
+
+
+def test_production_backup_permission_error_explains_host_directory_requirement(
+    production_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(production_project_config)
+    production = production_project_config.production
+    assert production is not None
+
+    sqlite_path = Path(production.sqlite_path)
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    sqlite_path.write_text("db", encoding="utf-8")
+
+    commands: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    def fake_ensure_dir(path: Path) -> None:
+        if path == Path(production.backup_dir):
+            raise PermissionError(13, "Permission denied", str(path))
+        path.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("webhooker.deployer.ensure_dir", fake_ensure_dir)
+
+    with pytest.raises(PermissionError, match="production backup directory"):
+        deployer.deploy_production(
+            "abcdef123456",
+            previous=DeployedProduction(
+                sha="oldsha1",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir=production.data_dir,
+                sqlite_path=production.sqlite_path,
+                image="ghcr.io/example/repo:sha-oldsha1",
+                branch="main",
+            ),
+        )

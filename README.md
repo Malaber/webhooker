@@ -376,6 +376,7 @@ For production, the template is usually almost identical. The difference is in t
    Set the GitHub repository, image registry, domain, and point `deployment.compose_file` at `/opt/example-app/deploy/compose.review.yml`.
 6. Create the runtime directories.
    Example: `/srv/webhooker/reviews/example-app`, `/var/lib/webhooker/state`, and `/var/lib/webhooker/wake`.
+   Those writable bind mounts must be owned by the unprivileged container user that runs `webhooker` in the published image, which is uid/gid `1000:1000` by default.
 7. Configure secrets for the host services.
    Export the GitHub API token and webhook secret so both `webhooker-api` and `webhooker-worker` can read them.
 8. Expose the wake endpoint.
@@ -410,6 +411,7 @@ When a PR opens, synchronizes, or reopens, `webhooker` will:
    Set repository, image path, branch name, hostname, and point `deployment.compose_file` at `/opt/example-app/deploy/compose.production.yml`.
 6. Create the runtime directories.
    Example: `/srv/webhooker/production/example-app`, `/srv/webhooker/production/example-app/backups`, `/var/lib/webhooker/state`, and `/var/lib/webhooker/wake`.
+   Those writable bind mounts must be owned by the unprivileged container user that runs `webhooker` in the published image, which is uid/gid `1000:1000` by default.
 7. Configure secrets for the host services.
    Export the GitHub API token and webhook secret for the API and worker.
 8. Expose the wake endpoint.
@@ -537,6 +539,16 @@ This setup keeps the trust boundary clean:
 - `/var/lib/webhooker/wake`: stores wake files created by the API and consumed by the worker
 - `/srv/webhooker`: holds persistent review and production app data such as SQLite files and backups
 
+### Writable mount ownership
+
+The published image runs both services as the unprivileged `webhooker` user, not as root. Any bind mount the API or worker must write to therefore needs host ownership or permissions that allow that user to write.
+
+At minimum, make these writable mounts owned by uid/gid `1000:1000` on the host:
+
+- `/var/lib/webhooker/state`
+- `/var/lib/webhooker/wake`
+- each app data root such as `/srv/webhooker/reviews/example-app` and `/srv/webhooker/production/example-app`
+
 ### Recommended environment file for webhooker itself
 
 Store this on the host at `/etc/webhooker/env/webhooker.env`:
@@ -551,7 +563,14 @@ If you manage multiple projects with different GitHub credentials, you can still
 ### Starting the webhooker stack
 
 ```bash
-mkdir -p /etc/webhooker/projects /etc/webhooker/env /var/lib/webhooker/state /var/lib/webhooker/wake
+mkdir -p \
+  /etc/webhooker/projects \
+  /etc/webhooker/env \
+  /var/lib/webhooker/state \
+  /var/lib/webhooker/wake \
+  /srv/webhooker/reviews/example-app \
+  /srv/webhooker/production/example-app
+chown -R 1000:1000 /var/lib/webhooker/state /var/lib/webhooker/wake /srv/webhooker
 docker compose -f /opt/webhooker/compose.yml up -d
 ```
 

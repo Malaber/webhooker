@@ -74,6 +74,17 @@ class Deployer:
             check=True,
         )
 
+    def _ensure_dir(self, path: Path, purpose: str) -> None:
+        try:
+            ensure_dir(path)
+        except PermissionError as exc:
+            message = (
+                f"Permission denied creating {purpose} at {path}. "
+                "The mounted host directory must already exist and be writable by the "
+                "unprivileged webhooker container user."
+            )
+            raise PermissionError(message) from exc
+
     def _compose_up(self, compose_project: str, extra_env: dict[str, str]) -> None:
         logger.info("Deploying compose project=%s", compose_project)
         self._run(
@@ -129,7 +140,7 @@ class Deployer:
         sqlite_path = self.sqlite_path_for_pr(pr.number)
         is_first_creation = not data_dir.exists()
 
-        ensure_dir(data_dir)
+        self._ensure_dir(data_dir, "review data directory")
         extra_env = {
             "APP_IMAGE": image,
             "APP_HOSTNAME": hostname,
@@ -170,7 +181,7 @@ class Deployer:
         sqlite_path = Path(production.sqlite_path)
         sqlite_existed = sqlite_path.exists()
 
-        ensure_dir(data_dir)
+        self._ensure_dir(data_dir, "production data directory")
         if previous is not None:
             self._compose_down(compose_project, remove_volumes=False)
             self._backup_sqlite(sqlite_path)
@@ -203,7 +214,7 @@ class Deployer:
             return
         production = self._production_config()
         backup_dir = Path(production.backup_dir)
-        ensure_dir(backup_dir)
+        self._ensure_dir(backup_dir, "production backup directory")
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         backup_path = backup_dir / f"{sqlite_path.stem}-{timestamp}{sqlite_path.suffix}"
         shutil.copy2(sqlite_path, backup_path)

@@ -10,10 +10,23 @@ webhooker_env:
   GITHUB_TOKEN: "{{ webhooker_github_token }}"
   GITHUB_WEBHOOK_SECRET: "{{ webhooker_github_webhook_secret }}"
 
+webhooker_container_uid: "1000"
+webhooker_container_gid: "1000"
+
 webhooker_worker_extra_mounts:
   - /srv/docker-ansible/webhooker/example-app/deploy:/srv/docker-ansible/webhooker/example-app/deploy:ro
   - /srv/docker-ansible/webhooker/example-app/secrets:/srv/docker-ansible/webhooker/example-app/secrets:ro
   - /srv/docker-ansible/webhooker/example-app/data:/srv/docker-ansible/webhooker/example-app/data
+
+webhooker_managed_directories:
+  - path: /srv/docker-ansible/webhooker/example-app/data/reviews
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
+    mode: "0775"
+  - path: /srv/docker-ansible/webhooker/example-app/data/production
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
+    mode: "0775"
 
 webhooker_managed_files:
   - src: files/example-app/deploy/webhooker/compose.review.yml
