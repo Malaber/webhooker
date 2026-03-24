@@ -10,6 +10,12 @@ webhooker_wake_dir: /srv/docker-ansible/webhooker/webhooker/wake
 webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
 webhooker_api_bind_address: 127.0.0.1
 webhooker_api_port: 9100
+webhooker_traefik_enabled: false
+webhooker_traefik_network: system_traefik_external
+webhooker_traefik_certresolver: letsencrypt
+webhooker_api_hostname: ""
+webhooker_api_router_name: webhooker-api
+webhooker_api_service_name: webhooker-api
 webhooker_worker_sleep_seconds: 60
 webhooker_container_uid: "1000"
 webhooker_container_gid: "1000"

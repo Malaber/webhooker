@@ -23,6 +23,12 @@ By default, the role keeps `webhooker` itself under `/srv/docker-ansible/webhook
 - `webhooker_image`: container image for both services. Default: `ghcr.io/malaber/webhooker/webhooker:main`
 - `webhooker_api_bind_address`: address used for the published API port. Default: `127.0.0.1`
 - `webhooker_api_port`: published API port. Default: `9100`
+- `webhooker_traefik_enabled`: add Docker-provider Traefik labels and attach `webhooker-api` to an external Traefik network. Default: `false`
+- `webhooker_traefik_network`: external Docker network name used by Traefik. Default: `system_traefik_external`
+- `webhooker_traefik_certresolver`: certresolver used on the `webhooker-api` router. Default: `letsencrypt`
+- `webhooker_api_hostname`: hostname Traefik should route to `webhooker-api`. Default: `""`
+- `webhooker_api_router_name`: Traefik router label name for `webhooker-api`. Default: `webhooker-api`
+- `webhooker_api_service_name`: Traefik service label name for `webhooker-api`. Default: `webhooker-api`
 - `webhooker_worker_sleep_seconds`: polling delay between worker runs inside the long-running worker container. Default: `60`
 - `webhooker_compose_pull`: whether the role runs `docker compose pull` before `up`. Default: `true`
 - `webhooker_container_uid`: numeric uid used by the unprivileged `webhooker` container user. Default: `"1000"`
@@ -140,6 +146,16 @@ The role always adds these mounts by default for the worker:
 - `<webhooker_state_dir>:<webhooker_state_dir>`
 - `<webhooker_wake_dir>:<webhooker_wake_dir>`
 
+## Traefik Labels For webhooker-api
+
+If you want `webhooker-api` exposed through Traefik's Docker provider instead of a file provider, enable `webhooker_traefik_enabled`. The role will then:
+
+- attach `webhooker-api` to the external Docker network named by `webhooker_traefik_network`
+- render Traefik labels for the hostname in `webhooker_api_hostname`
+- keep the normal published port unless you choose to override it in your own deployment pattern
+
+When `webhooker_traefik_enabled: true`, `webhooker_api_hostname` is required.
+
 ## Idempotency
 
 - Directory, template, and copy tasks only change when content or metadata changes.
@@ -168,6 +184,11 @@ Non-secret vars:
 ```yaml
 ---
 webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
+
+webhooker_traefik_enabled: true
+webhooker_traefik_network: system_traefik_external
+webhooker_traefik_certresolver: letsencrypt
+webhooker_api_hostname: wake.example.com
 
 webhooker_env:
   GITHUB_TOKEN: "{{ webhooker_github_token }}"

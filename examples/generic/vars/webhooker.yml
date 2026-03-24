@@ -6,6 +6,11 @@ webhooker_env_dir: /srv/docker-ansible/webhooker/webhooker/env
 webhooker_state_dir: /srv/docker-ansible/webhooker/webhooker/state
 webhooker_wake_dir: /srv/docker-ansible/webhooker/webhooker/wake
 
+webhooker_traefik_enabled: true
+webhooker_traefik_network: system_traefik_external
+webhooker_traefik_certresolver: letsencrypt
+webhooker_api_hostname: wake.example.com
+
 webhooker_env:
   GITHUB_TOKEN: "{{ webhooker_github_token }}"
   GITHUB_WEBHOOK_SECRET: "{{ webhooker_github_webhook_secret }}"

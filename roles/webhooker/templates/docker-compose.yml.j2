@@ -19,6 +19,17 @@ services:
       - {{ (webhooker_wake_dir ~ ':' ~ webhooker_wake_dir) | to_json }}
     ports:
       - {{ ((webhooker_api_bind_address ~ ':' ~ (webhooker_api_port | string) ~ ':' ~ (webhooker_api_port | string))) | to_json }}
+{% if webhooker_traefik_enabled %}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{ webhooker_api_router_name }}.rule=Host(`{{ webhooker_api_hostname }}`)"
+      - "traefik.http.routers.{{ webhooker_api_router_name }}.entrypoints=websecure"
+      - "traefik.http.routers.{{ webhooker_api_router_name }}.tls.certresolver={{ webhooker_traefik_certresolver }}"
+      - "traefik.http.services.{{ webhooker_api_service_name }}.loadbalancer.server.port={{ webhooker_api_port }}"
+    networks:
+      - default
+      - traefik
+{% endif %}
 
   webhooker-worker:
     image: {{ webhooker_image | to_json }}
@@ -41,3 +52,10 @@ services:
 {% for mount in webhooker_worker_extra_mounts %}
       - {{ mount | to_json }}
 {% endfor %}
+
+{% if webhooker_traefik_enabled %}
+networks:
+  traefik:
+    external: true
+    name: {{ webhooker_traefik_network | to_json }}
+{% endif %}

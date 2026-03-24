@@ -11,6 +11,12 @@
       - webhooker_image | length > 0
     fail_msg: Required webhooker variables are missing.
 
+- name: Validate webhooker Traefik settings
+  ansible.builtin.assert:
+    that:
+      - (not webhooker_traefik_enabled) or (webhooker_api_hostname | length > 0)
+    fail_msg: webhooker_api_hostname must be set when webhooker_traefik_enabled=true.
+
 - name: Validate webhooker projects
   ansible.builtin.assert:
     that:
