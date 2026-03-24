@@ -26,7 +26,7 @@ def main() -> None:
         f'version = "{version}"',
     )
     replace_pattern(
-        repo_root / "ansible_collections/malaber/webhooker/galaxy.yml",
+        repo_root / "galaxy.yml",
         r"^version:\s*[^\n]+$",
         f"version: {version}",
     )

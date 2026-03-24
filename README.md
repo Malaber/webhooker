@@ -48,9 +48,14 @@ webhooker-worker
 webhooker/
 ├── AGENTS.md
 ├── Dockerfile
+├── galaxy.yml
 ├── pyproject.toml
 ├── README.md
+├── roles/
+│   └── webhooker/
 ├── webhooker/
+├── examples/
+│   └── generic/
 ├── config/
 │   ├── example.production.yaml
 │   └── example.project.yaml
@@ -59,6 +64,38 @@ webhooker/
 ├── tests/
 └── .github/workflows/ci.yml
 ```
+
+## Ansible collection
+
+This repository is also the root of the `malaber.webhooker` Ansible collection, so another repo can install it directly from Git without a subdirectory suffix.
+
+Direct Git install:
+
+```bash
+ansible-galaxy collection install git+https://github.com/Malaber/webhooker.git
+```
+
+`requirements.yml` example for direct Git install:
+
+```yaml
+---
+collections:
+  - name: git+https://github.com/Malaber/webhooker.git
+    type: git
+```
+
+Direct release tarball install:
+
+```bash
+ansible-galaxy collection install \
+  https://github.com/Malaber/webhooker/releases/download/vX.Y.Z/malaber-webhooker-X.Y.Z.tar.gz
+```
+
+The collection exposes one role:
+
+- `malaber.webhooker.webhooker`
+
+The reusable role content lives in [`roles/webhooker/`](/Users/daniel/Git/Github.com/Malaber/webhooker/roles/webhooker), and the generic consumer example lives in [`examples/generic/`](/Users/daniel/Git/Github.com/Malaber/webhooker/examples/generic).
 
 ## Deployment modes
 
@@ -587,7 +624,7 @@ The GitHub Actions workflow:
 3. builds the production Docker image
 4. publishes the image to GHCR on successful pushes to `main` or version tags
 
-Pushes to `main` now compute the next patch version from git tags, publish the Docker image and Ansible Galaxy collection tarball for that same version, and push the matching git tag automatically. Pushes to non-`main` branches publish matching `-rc.<run>` prerelease versions so both artifacts stay aligned before merge. The collection source lives under `ansible_collections/malaber/webhooker/`, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
+Pushes to `main` now compute the next patch version from git tags, publish the Docker image and Ansible Galaxy collection tarball for that same version, and push the matching git tag automatically. Pushes to non-`main` branches publish matching `-rc.<run>` prerelease versions so both artifacts stay aligned before merge. The repository root is the collection root, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
 
 ## Troubleshooting
 

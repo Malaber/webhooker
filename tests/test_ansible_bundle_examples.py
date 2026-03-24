@@ -6,9 +6,7 @@ from webhooker.config import load_project_config
 
 
 def test_generic_review_example_project_loads() -> None:
-    path = Path(
-        "ansible_collections/malaber/webhooker/examples/generic/projects/example-app-review.yaml"
-    )
+    path = Path("examples/generic/projects/example-app-review.yaml")
 
     config = load_project_config(path)
 
@@ -18,9 +16,7 @@ def test_generic_review_example_project_loads() -> None:
 
 
 def test_generic_production_example_project_loads() -> None:
-    path = Path(
-        "ansible_collections/malaber/webhooker/examples/generic/projects/example-app-production.yaml"
-    )
+    path = Path("examples/generic/projects/example-app-production.yaml")
 
     config = load_project_config(path)
 

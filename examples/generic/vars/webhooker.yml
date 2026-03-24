@@ -1,35 +1,40 @@
 ---
 webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
+webhooker_deploy_path: /srv/docker-ansible/webhooker/webhooker
+webhooker_config_dir: /srv/docker-ansible/webhooker/webhooker/projects
+webhooker_env_dir: /srv/docker-ansible/webhooker/webhooker/env
+webhooker_state_dir: /srv/docker-ansible/webhooker/webhooker/state
+webhooker_wake_dir: /srv/docker-ansible/webhooker/webhooker/wake
 
 webhooker_env:
   GITHUB_TOKEN: "{{ webhooker_github_token }}"
   GITHUB_WEBHOOK_SECRET: "{{ webhooker_github_webhook_secret }}"
 
 webhooker_worker_extra_mounts:
-  - /opt/example-app/deploy/webhooker:/opt/example-app/deploy/webhooker:ro
-  - /etc/example-app:/etc/example-app:ro
-  - /srv/webhooker:/srv/webhooker
+  - /srv/docker-ansible/webhooker/example-app/deploy:/srv/docker-ansible/webhooker/example-app/deploy:ro
+  - /srv/docker-ansible/webhooker/example-app/secrets:/srv/docker-ansible/webhooker/example-app/secrets:ro
+  - /srv/docker-ansible/webhooker/example-app/data:/srv/docker-ansible/webhooker/example-app/data
 
 webhooker_managed_files:
   - src: files/example-app/deploy/webhooker/compose.review.yml
-    dest: /opt/example-app/deploy/webhooker/compose.review.yml
+    dest: /srv/docker-ansible/webhooker/example-app/deploy/compose.review.yml
     mode: "0644"
   - src: files/example-app/deploy/webhooker/compose.production.yml
-    dest: /opt/example-app/deploy/webhooker/compose.production.yml
+    dest: /srv/docker-ansible/webhooker/example-app/deploy/compose.production.yml
     mode: "0644"
   - src: files/example-app/deploy/webhooker/env/review.common.env
-    dest: /opt/example-app/deploy/webhooker/env/review.common.env
+    dest: /srv/docker-ansible/webhooker/example-app/deploy/env/review.common.env
     mode: "0644"
   - src: files/example-app/deploy/webhooker/env/production.common.env
-    dest: /opt/example-app/deploy/webhooker/env/production.common.env
+    dest: /srv/docker-ansible/webhooker/example-app/deploy/env/production.common.env
     mode: "0644"
 
 webhooker_secret_env_files:
-  - path: /etc/example-app/review.secrets.env
+  - path: /srv/docker-ansible/webhooker/example-app/secrets/review.env
     mode: "0600"
     content:
       SECRET_KEY: "{{ example_app_review_secret_key }}"
-  - path: /etc/example-app/production.secrets.env
+  - path: /srv/docker-ansible/webhooker/example-app/secrets/production.env
     mode: "0600"
     content:
       SECRET_KEY: "{{ example_app_production_secret_key }}"
@@ -48,9 +53,9 @@ webhooker_projects:
           - ping
       deployment:
         mode: review
-        compose_file: /opt/example-app/deploy/webhooker/compose.review.yml
+        compose_file: /srv/docker-ansible/webhooker/example-app/deploy/compose.review.yml
         compose_bin: docker
-        working_directory: /opt/example-app/deploy/webhooker
+        working_directory: /srv/docker-ansible/webhooker/example-app/deploy
         project_name_prefix: example-app-pr-
         preview_base_domain: review.example.com
         hostname_template: pr-{pr}.review.example.com
@@ -59,9 +64,9 @@ webhooker_projects:
         repository: your-github-user-or-org/example-app
         tag_template: pr-{pr}-{sha7}
       preview:
-        base_dir: /srv/webhooker/reviews/example-app
-        data_dir_template: /srv/webhooker/reviews/example-app/pr-{pr}/data
-        sqlite_path_template: /srv/webhooker/reviews/example-app/pr-{pr}/data/app.db
+        base_dir: /srv/docker-ansible/webhooker/example-app/data/reviews
+        data_dir_template: /srv/docker-ansible/webhooker/example-app/data/reviews/pr-{pr}
+        sqlite_path_template: /srv/docker-ansible/webhooker/example-app/data/reviews/pr-{pr}/app.db
       reconcile:
         poll_interval_seconds: 60
         cleanup_closed_prs: true
@@ -70,9 +75,9 @@ webhooker_projects:
         enable_labels: true
         certresolver: letsencrypt
       state:
-        state_file: /var/lib/webhooker/state/example-app-review.json
+        state_file: /srv/docker-ansible/webhooker/webhooker/state/example-app-review.json
       wake:
-        wake_file: /var/lib/webhooker/wake/example-app-review.wake
+        wake_file: /srv/docker-ansible/webhooker/webhooker/wake/example-app-review.wake
 
   - filename: example-app-production.yaml
     content:
@@ -87,9 +92,9 @@ webhooker_projects:
           - ping
       deployment:
         mode: production
-        compose_file: /opt/example-app/deploy/webhooker/compose.production.yml
+        compose_file: /srv/docker-ansible/webhooker/example-app/deploy/compose.production.yml
         compose_bin: docker
-        working_directory: /opt/example-app/deploy/webhooker
+        working_directory: /srv/docker-ansible/webhooker/example-app/deploy
         project_name_prefix: example-app-
         production_project_name: example-app
         production_hostname: app.example.com
@@ -100,9 +105,9 @@ webhooker_projects:
         production_tag_template: sha-{sha7}
       production:
         branch: main
-        data_dir: /srv/webhooker/production/example-app/data
-        sqlite_path: /srv/webhooker/production/example-app/data/app.db
-        backup_dir: /srv/webhooker/production/example-app/backups
+        data_dir: /srv/docker-ansible/webhooker/example-app/data/production
+        sqlite_path: /srv/docker-ansible/webhooker/example-app/data/production/app.db
+        backup_dir: /srv/docker-ansible/webhooker/example-app/data/production/backups
         backup_keep: 3
       reconcile:
         poll_interval_seconds: 60
@@ -112,6 +117,6 @@ webhooker_projects:
         enable_labels: true
         certresolver: letsencrypt
       state:
-        state_file: /var/lib/webhooker/state/example-app-production.json
+        state_file: /srv/docker-ansible/webhooker/webhooker/state/example-app-production.json
       wake:
-        wake_file: /var/lib/webhooker/wake/example-app-production.wake
+        wake_file: /srv/docker-ansible/webhooker/webhooker/wake/example-app-production.wake

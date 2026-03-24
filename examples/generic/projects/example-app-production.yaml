@@ -11,9 +11,9 @@ github:
 
 deployment:
   mode: production
-  compose_file: /opt/example-app/deploy/webhooker/compose.production.yml
+  compose_file: /srv/docker-ansible/webhooker/example-app/deploy/compose.production.yml
   compose_bin: docker
-  working_directory: /opt/example-app/deploy/webhooker
+  working_directory: /srv/docker-ansible/webhooker/example-app/deploy
   project_name_prefix: example-app-
   production_project_name: example-app
   production_hostname: app.example.com
@@ -26,9 +26,9 @@ image:
 
 production:
   branch: main
-  data_dir: /srv/webhooker/production/example-app/data
-  sqlite_path: /srv/webhooker/production/example-app/data/app.db
-  backup_dir: /srv/webhooker/production/example-app/backups
+  data_dir: /srv/docker-ansible/webhooker/example-app/data/production
+  sqlite_path: /srv/docker-ansible/webhooker/example-app/data/production/app.db
+  backup_dir: /srv/docker-ansible/webhooker/example-app/data/production/backups
   backup_keep: 3
 
 reconcile:
@@ -41,7 +41,7 @@ traefik:
   certresolver: letsencrypt
 
 state:
-  state_file: /var/lib/webhooker/state/example-app-production.json
+  state_file: /srv/docker-ansible/webhooker/webhooker/state/example-app-production.json
 
 wake:
-  wake_file: /var/lib/webhooker/wake/example-app-production.wake
+  wake_file: /srv/docker-ansible/webhooker/webhooker/wake/example-app-production.wake

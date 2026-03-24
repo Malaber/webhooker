@@ -3,8 +3,8 @@ services:
     image: ${APP_IMAGE}
     restart: unless-stopped
     env_file:
-      - ./env/review.common.env
-      - /etc/example-app/review.secrets.env
+      - ./env/production.common.env
+      - /srv/docker-ansible/webhooker/example-app/secrets/production.env
     environment:
       APP_HOSTNAME: ${APP_HOSTNAME}
       DATABASE_URL: sqlite+aiosqlite:///${APP_SQLITE_PATH}

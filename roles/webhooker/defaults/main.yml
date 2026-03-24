@@ -1,11 +1,11 @@
 ---
-webhooker_deploy_path: /opt/webhooker
+webhooker_deploy_path: /srv/docker-ansible/webhooker/webhooker
 webhooker_compose_project_name: webhooker
 
-webhooker_config_dir: /etc/webhooker/projects
-webhooker_env_dir: /etc/webhooker/env
-webhooker_state_dir: /var/lib/webhooker/state
-webhooker_wake_dir: /var/lib/webhooker/wake
+webhooker_config_dir: /srv/docker-ansible/webhooker/webhooker/projects
+webhooker_env_dir: /srv/docker-ansible/webhooker/webhooker/env
+webhooker_state_dir: /srv/docker-ansible/webhooker/webhooker/state
+webhooker_wake_dir: /srv/docker-ansible/webhooker/webhooker/wake
 
 webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
 webhooker_api_bind_address: 127.0.0.1

@@ -102,8 +102,7 @@ jobs:
       - name: Stamp release version into build metadata
         run: python .github/scripts/stamp_version.py "${{ needs.version.outputs.release_version }}"
       - name: Build collection tarball
-        working-directory: ansible_collections/malaber/webhooker
-        run: ansible-galaxy collection build --force --output-path ../../../dist
+        run: ansible-galaxy collection build --force --output-path dist
       - name: Record artifact name
         id: artifact
         env:

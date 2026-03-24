@@ -11,9 +11,9 @@ github:
 
 deployment:
   mode: review
-  compose_file: /opt/example-app/deploy/webhooker/compose.review.yml
+  compose_file: /srv/docker-ansible/webhooker/example-app/deploy/compose.review.yml
   compose_bin: docker
-  working_directory: /opt/example-app/deploy/webhooker
+  working_directory: /srv/docker-ansible/webhooker/example-app/deploy
   project_name_prefix: example-app-pr-
   preview_base_domain: review.example.com
   hostname_template: pr-{pr}.review.example.com
@@ -24,9 +24,9 @@ image:
   tag_template: pr-{pr}-{sha7}
 
 preview:
-  base_dir: /srv/webhooker/reviews/example-app
-  data_dir_template: /srv/webhooker/reviews/example-app/pr-{pr}/data
-  sqlite_path_template: /srv/webhooker/reviews/example-app/pr-{pr}/data/app.db
+  base_dir: /srv/docker-ansible/webhooker/example-app/data/reviews
+  data_dir_template: /srv/docker-ansible/webhooker/example-app/data/reviews/pr-{pr}
+  sqlite_path_template: /srv/docker-ansible/webhooker/example-app/data/reviews/pr-{pr}/app.db
 
 reconcile:
   poll_interval_seconds: 60
@@ -38,7 +38,7 @@ traefik:
   certresolver: letsencrypt
 
 state:
-  state_file: /var/lib/webhooker/state/example-app-review.json
+  state_file: /srv/docker-ansible/webhooker/webhooker/state/example-app-review.json
 
 wake:
-  wake_file: /var/lib/webhooker/wake/example-app-review.wake
+  wake_file: /srv/docker-ansible/webhooker/webhooker/wake/example-app-review.wake
