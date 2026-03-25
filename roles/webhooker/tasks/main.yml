@@ -141,8 +141,8 @@
     src: secret-envfile.j2
     dest: "{{ item.path }}"
     mode: "{{ item.mode | default('0600') }}"
-    owner: "{{ item.owner | default(omit) }}"
-    group: "{{ item.group | default(omit) }}"
+    owner: "{{ item.owner | default(webhooker_container_uid) }}"
+    group: "{{ item.group | default(webhooker_container_gid) }}"
   become: true
   loop: "{{ webhooker_secret_env_files }}"
   loop_control:

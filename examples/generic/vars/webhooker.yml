@@ -48,10 +48,14 @@ webhooker_managed_files:
 webhooker_secret_env_files:
   - path: /srv/example-app/secrets/review.env
     mode: "0600"
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
     content:
       SECRET_KEY: "{{ example_app_review_secret_key }}"
   - path: /srv/example-app/secrets/production.env
     mode: "0600"
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
     content:
       SECRET_KEY: "{{ example_app_production_secret_key }}"
 

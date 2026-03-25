@@ -552,6 +552,7 @@ At minimum, make these writable mounts owned by uid/gid `1000:1000` on the host:
 - `/srv/example-app/webhooker/runtime/state`
 - `/srv/example-app/webhooker/runtime/wake`
 - each app data root such as `/srv/example-app/data/reviews` and `/srv/example-app/data/production`
+- any app secret env files that your Compose templates reference, such as `/srv/example-app/secrets/review.env`
 
 ### Recommended environment file for webhooker itself
 

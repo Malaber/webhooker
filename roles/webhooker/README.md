@@ -110,6 +110,7 @@ If you change the container uid or gid, set `webhooker_container_uid` and `webho
 ## Secret Env Files
 
 `webhooker_secret_env_files` renders dotenv files on the target host.
+By default, the role writes them with owner/group `webhooker_container_uid:webhooker_container_gid` so the unprivileged worker can read them. Override `owner` or `group` only if your deployment uses different readable credentials.
 
 Example:
 
@@ -117,6 +118,8 @@ Example:
 webhooker_secret_env_files:
   - path: /srv/example-app/secrets/review.env
     mode: "0600"
+    owner: "{{ webhooker_container_uid }}"
+    group: "{{ webhooker_container_gid }}"
     content:
       SECRET_KEY: "{{ example_app_review_secret_key }}"
 ```
