@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webhooker"
-version = "0.3.14"
+version = "0.3.15"
 description = "Reusable PR review and production deployment reconciler for Docker Compose"
 readme = "README.md"
 requires-python = ">=3.14"
