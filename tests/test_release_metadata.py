@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 def test_role_default_image_uses_installed_collection_version() -> None:
@@ -18,3 +19,15 @@ def test_examples_and_docs_do_not_recommend_main_image_tag() -> None:
     assert ":main" not in role_readme
     assert ":main" not in readme
     assert "Stable releases publish both `<version>` and `latest`" in readme
+
+
+def test_project_and_collection_versions_match() -> None:
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    galaxy = Path("galaxy.yml").read_text(encoding="utf-8")
+
+    pyproject_match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
+    galaxy_match = re.search(r"^version:\s*([^\n]+)$", galaxy, re.MULTILINE)
+
+    assert pyproject_match is not None
+    assert galaxy_match is not None
+    assert pyproject_match.group(1) == galaxy_match.group(1).strip()
