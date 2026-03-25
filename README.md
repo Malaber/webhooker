@@ -563,6 +563,8 @@ Store this on the host at `/srv/example-app/webhooker/env/webhooker.env`:
 ```dotenv
 GITHUB_TOKEN=replace-me
 GITHUB_WEBHOOK_SECRET=replace-me
+
+# Surrounding whitespace is ignored when webhook signatures are verified.
 ```
 
 If you manage multiple projects with different GitHub credentials, you can still use one shared env file, or you can split secrets by container orchestration approach. The important rule is that the environment variable names must match the names used in each `webhooker` YAML file.

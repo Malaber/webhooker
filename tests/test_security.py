@@ -25,6 +25,20 @@ def test_missing_github_signature_returns_false() -> None:
     assert verify_github_signature("secret", b"body", None) is False
 
 
+def test_signature_verification_strips_surrounding_secret_whitespace() -> None:
+    body = b'{"hello":"world"}'
+    signature = "sha256=" + hmac.new(b"supersecret", body, sha256).hexdigest()
+
+    assert verify_github_signature("  supersecret\n", body, signature) is True
+
+
+def test_signature_verification_strips_surrounding_header_whitespace() -> None:
+    body = b'{"hello":"world"}'
+    signature = "sha256=" + hmac.new(b"supersecret", body, sha256).hexdigest()
+
+    assert verify_github_signature("supersecret", body, f"  {signature}\n") is True
+
+
 def test_configure_logging_calls_basic_config(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

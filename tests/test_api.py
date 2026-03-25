@@ -174,3 +174,24 @@ def test_wake_endpoint_rejects_missing_webhook_secret(
     )
 
     assert response.status_code == 500
+
+
+def test_wake_endpoint_accepts_secret_with_surrounding_whitespace(
+    config_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(create_app(str(config_dir)))
+    body = json.dumps({"repository": {"full_name": "example/repo"}}).encode("utf-8")
+    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", " supersecret\n")
+
+    response = client.post(
+        "/github/review-demo/wake",
+        content=body,
+        headers={
+            "X-GitHub-Event": "pull_request",
+            "X-Hub-Signature-256": _signature("supersecret", body),
+            "Content-Type": "application/json",
+        },
+    )
+
+    assert response.status_code == 202
