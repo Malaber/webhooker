@@ -2,7 +2,7 @@
 
 `malaber.webhooker.webhooker` deploys the `webhooker-api` and `webhooker-worker` containers with Docker Compose, writes one or more `webhooker` project YAML files, publishes app bundle files to the target host, and renders secret env files used by managed apps.
 
-By default, the role keeps `webhooker` itself under `/srv/docker-ansible/webhooker/webhooker/`. A good matching convention for managed apps is `/srv/docker-ansible/webhooker/<appname>/`.
+By default, the role keeps `webhooker`, app deployment files, secrets, and app data under one self-contained app root such as `/srv/example-app/`.
 
 ## Requirements
 
@@ -14,12 +14,12 @@ By default, the role keeps `webhooker` itself under `/srv/docker-ansible/webhook
 
 ### Core paths and stack settings
 
-- `webhooker_deploy_path`: host directory that stores `docker-compose.yml`. Default: `/srv/docker-ansible/webhooker/webhooker`
+- `webhooker_deploy_path`: host directory that stores `docker-compose.yml`. Default: `/srv/webhooker`
 - `webhooker_compose_project_name`: Compose project name for the `webhooker` stack. Default: `webhooker`
-- `webhooker_config_dir`: directory that holds `webhooker` project YAML files. Default: `/srv/docker-ansible/webhooker/webhooker/projects`
-- `webhooker_env_dir`: directory that holds `webhooker.env`. Default: `/srv/docker-ansible/webhooker/webhooker/env`
-- `webhooker_state_dir`: directory for persisted worker state. Default: `/srv/docker-ansible/webhooker/webhooker/state`
-- `webhooker_wake_dir`: directory for wake files written by the API and consumed by the worker. Default: `/srv/docker-ansible/webhooker/webhooker/wake`
+- `webhooker_config_dir`: directory that holds `webhooker` project YAML files. Default: `/srv/webhooker/projects`
+- `webhooker_env_dir`: directory that holds `webhooker.env`. Default: `/srv/webhooker/env`
+- `webhooker_state_dir`: directory for persisted worker state. Default: `/srv/webhooker/runtime/state`
+- `webhooker_wake_dir`: directory for wake files written by the API and consumed by the worker. Default: `/srv/webhooker/runtime/wake`
 - `webhooker_image`: container image for both services. Default: `ghcr.io/malaber/webhooker/webhooker:main`
 - `webhooker_api_bind_address`: address used for the published API port. Default: `127.0.0.1`
 - `webhooker_api_port`: published API port. Default: `9100`
@@ -72,7 +72,7 @@ Example:
 ```yaml
 webhooker_managed_files:
   - src: files/example-app/deploy/webhooker/compose.review.yml
-    dest: /srv/docker-ansible/webhooker/example-app/deploy/compose.review.yml
+    dest: /srv/example-app/deploy/compose.review.yml
     mode: "0644"
 ```
 
@@ -94,17 +94,17 @@ Example:
 
 ```yaml
 webhooker_managed_directories:
-  - path: /srv/docker-ansible/webhooker/example-app/data/reviews
+  - path: /srv/example-app/data/reviews
     owner: "1000"
     group: "1000"
     mode: "0775"
-  - path: /srv/docker-ansible/webhooker/example-app/data/production
+  - path: /srv/example-app/data/production
     owner: "1000"
     group: "1000"
     mode: "0775"
 ```
 
-If you change the container uid or gid, set `webhooker_container_uid` and `webhooker_container_gid` to match, and use those same numeric ids for any writable bind mounts you manage outside the role.
+If you change the container uid or gid, set `webhooker_container_uid` and `webhooker_container_gid` to match, and use those same numeric ids for any writable bind mounts you manage outside the role. Keep `state_file` and `wake_file` inside those mounted directories instead of bind-mounting the files directly.
 
 ## Secret Env Files
 
@@ -114,7 +114,7 @@ Example:
 
 ```yaml
 webhooker_secret_env_files:
-  - path: /srv/docker-ansible/webhooker/example-app/secrets/review.env
+  - path: /srv/example-app/secrets/review.env
     mode: "0600"
     content:
       SECRET_KEY: "{{ example_app_review_secret_key }}"
@@ -128,15 +128,13 @@ SECRET_KEY=replace-me
 
 ## Extra Worker Mounts
 
-The worker container runs `docker compose`, so it must be able to access every host path referenced by the application Compose templates. Add those paths with `webhooker_worker_extra_mounts`.
+The worker container runs `docker compose`, so it must be able to access every host path referenced by the application Compose templates. The simplest pattern is to mount the whole app root once with `webhooker_worker_extra_mounts`.
 
 Example:
 
 ```yaml
 webhooker_worker_extra_mounts:
-  - /srv/docker-ansible/webhooker/example-app/deploy:/srv/docker-ansible/webhooker/example-app/deploy:ro
-  - /srv/docker-ansible/webhooker/example-app/secrets:/srv/docker-ansible/webhooker/example-app/secrets:ro
-  - /srv/docker-ansible/webhooker/example-app/data:/srv/docker-ansible/webhooker/example-app/data
+  - /srv/example-app:/srv/example-app
 ```
 
 The role always adds these mounts by default for the worker:
@@ -198,40 +196,38 @@ webhooker_container_uid: "1000"
 webhooker_container_gid: "1000"
 
 webhooker_worker_extra_mounts:
-  - /srv/docker-ansible/webhooker/example-app/deploy:/srv/docker-ansible/webhooker/example-app/deploy:ro
-  - /srv/docker-ansible/webhooker/example-app/secrets:/srv/docker-ansible/webhooker/example-app/secrets:ro
-  - /srv/docker-ansible/webhooker/example-app/data:/srv/docker-ansible/webhooker/example-app/data
+  - /srv/example-app:/srv/example-app
 
 webhooker_managed_directories:
-  - path: /srv/docker-ansible/webhooker/example-app/data/reviews
+  - path: /srv/example-app/data/reviews
     owner: "{{ webhooker_container_uid }}"
     group: "{{ webhooker_container_gid }}"
     mode: "0775"
-  - path: /srv/docker-ansible/webhooker/example-app/data/production
+  - path: /srv/example-app/data/production
     owner: "{{ webhooker_container_uid }}"
     group: "{{ webhooker_container_gid }}"
     mode: "0775"
 
 webhooker_managed_files:
   - src: files/example-app/deploy/webhooker/compose.review.yml
-    dest: /srv/docker-ansible/webhooker/example-app/deploy/compose.review.yml
+    dest: /srv/example-app/deploy/compose.review.yml
     mode: "0644"
   - src: files/example-app/deploy/webhooker/compose.production.yml
-    dest: /srv/docker-ansible/webhooker/example-app/deploy/compose.production.yml
+    dest: /srv/example-app/deploy/compose.production.yml
     mode: "0644"
   - src: files/example-app/deploy/webhooker/env/review.common.env
-    dest: /srv/docker-ansible/webhooker/example-app/deploy/env/review.common.env
+    dest: /srv/example-app/deploy/env/review.common.env
     mode: "0644"
   - src: files/example-app/deploy/webhooker/env/production.common.env
-    dest: /srv/docker-ansible/webhooker/example-app/deploy/env/production.common.env
+    dest: /srv/example-app/deploy/env/production.common.env
     mode: "0644"
 
 webhooker_secret_env_files:
-  - path: /srv/docker-ansible/webhooker/example-app/secrets/review.env
+  - path: /srv/example-app/secrets/review.env
     mode: "0600"
     content:
       SECRET_KEY: "{{ example_app_review_secret_key }}"
-  - path: /srv/docker-ansible/webhooker/example-app/secrets/production.env
+  - path: /srv/example-app/secrets/production.env
     mode: "0600"
     content:
       SECRET_KEY: "{{ example_app_production_secret_key }}"
@@ -250,9 +246,9 @@ webhooker_projects:
           - ping
       deployment:
         mode: review
-        compose_file: /srv/docker-ansible/webhooker/example-app/deploy/compose.review.yml
+        compose_file: /srv/example-app/deploy/compose.review.yml
         compose_bin: docker
-        working_directory: /srv/docker-ansible/webhooker/example-app/deploy
+        working_directory: /srv/example-app/deploy
         project_name_prefix: example-app-pr-
         preview_base_domain: review.example.com
         hostname_template: pr-{pr}.review.example.com
@@ -261,9 +257,9 @@ webhooker_projects:
         repository: your-github-user-or-org/example-app
         tag_template: pr-{pr}-{sha7}
       preview:
-        base_dir: /srv/docker-ansible/webhooker/example-app/data/reviews
-        data_dir_template: /srv/docker-ansible/webhooker/example-app/data/reviews/pr-{pr}
-        sqlite_path_template: /srv/docker-ansible/webhooker/example-app/data/reviews/pr-{pr}/app.db
+        base_dir: /srv/example-app/data/reviews
+        data_dir_template: /srv/example-app/data/reviews/pr-{pr}
+        sqlite_path_template: /srv/example-app/data/reviews/pr-{pr}/app.db
       reconcile:
         poll_interval_seconds: 60
         cleanup_closed_prs: true
@@ -272,9 +268,9 @@ webhooker_projects:
         enable_labels: true
         certresolver: letsencrypt
       state:
-        state_file: /srv/docker-ansible/webhooker/webhooker/state/example-app-review.json
+        state_file: /srv/example-app/webhooker/runtime/state/example-app-review.json
       wake:
-        wake_file: /srv/docker-ansible/webhooker/webhooker/wake/example-app-review.wake
+        wake_file: /srv/example-app/webhooker/runtime/wake/example-app-review.wake
 
   - filename: example-app-production.yaml
     content:
@@ -289,9 +285,9 @@ webhooker_projects:
           - ping
       deployment:
         mode: production
-        compose_file: /srv/docker-ansible/webhooker/example-app/deploy/compose.production.yml
+        compose_file: /srv/example-app/deploy/compose.production.yml
         compose_bin: docker
-        working_directory: /srv/docker-ansible/webhooker/example-app/deploy
+        working_directory: /srv/example-app/deploy
         project_name_prefix: example-app-
         production_project_name: example-app
         production_hostname: app.example.com
@@ -302,9 +298,9 @@ webhooker_projects:
         production_tag_template: sha-{sha7}
       production:
         branch: main
-        data_dir: /srv/docker-ansible/webhooker/example-app/data/production
-        sqlite_path: /srv/docker-ansible/webhooker/example-app/data/production/app.db
-        backup_dir: /srv/docker-ansible/webhooker/example-app/data/production/backups
+        data_dir: /srv/example-app/data/production
+        sqlite_path: /srv/example-app/data/production/app.db
+        backup_dir: /srv/example-app/data/production/backups
         backup_keep: 3
       reconcile:
         poll_interval_seconds: 60
@@ -314,9 +310,9 @@ webhooker_projects:
         enable_labels: true
         certresolver: letsencrypt
       state:
-        state_file: /srv/docker-ansible/webhooker/webhooker/state/example-app-production.json
+        state_file: /srv/example-app/webhooker/runtime/state/example-app-production.json
       wake:
-        wake_file: /srv/docker-ansible/webhooker/webhooker/wake/example-app-production.wake
+        wake_file: /srv/example-app/webhooker/runtime/wake/example-app-production.wake
 ```
 
 Secret vars:

@@ -11,9 +11,9 @@ github:
 
 deployment:
   mode: production
-  compose_file: /opt/example-app/deploy/compose.production.yml
+  compose_file: /srv/example-app/deploy/compose.production.yml
   compose_bin: docker
-  working_directory: /opt/example-app/deploy
+  working_directory: /srv/example-app/deploy
   project_name_prefix: example-app-
   production_project_name: example-app-production
   production_hostname: app.example.com
@@ -26,9 +26,9 @@ image:
 
 production:
   branch: main
-  data_dir: /srv/webhooker/production/example-app
-  sqlite_path: /srv/webhooker/production/example-app/app.db
-  backup_dir: /srv/webhooker/production/example-app/backups
+  data_dir: /srv/example-app/data/production
+  sqlite_path: /srv/example-app/data/production/app.db
+  backup_dir: /srv/example-app/data/production/backups
   backup_keep: 3
 
 reconcile:
@@ -41,7 +41,7 @@ traefik:
   certresolver: letsencrypt
 
 state:
-  state_file: /var/lib/webhooker/state/example-production.json
+  state_file: /srv/example-app/webhooker/runtime/state/example-production.json
 
 wake:
-  wake_file: /var/lib/webhooker/wake/example-production
+  wake_file: /srv/example-app/webhooker/runtime/wake/example-production

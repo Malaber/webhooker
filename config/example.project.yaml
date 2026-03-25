@@ -11,9 +11,9 @@ github:
 
 deployment:
   mode: review
-  compose_file: /opt/example-app/deploy/compose.review.yml
+  compose_file: /srv/example-app/deploy/compose.review.yml
   compose_bin: docker
-  working_directory: /opt/example-app/deploy
+  working_directory: /srv/example-app/deploy
   project_name_prefix: example-app-pr-
   preview_base_domain: review.example.com
   hostname_template: "pr-{pr}.review.example.com"
@@ -24,16 +24,16 @@ image:
   tag_template: "pr-{pr}-{sha7}"
 
 preview:
-  base_dir: /srv/webhooker/reviews/example-app
-  data_dir_template: "/srv/webhooker/reviews/example-app/pr-{pr}"
-  sqlite_path_template: "/srv/webhooker/reviews/example-app/pr-{pr}/app.db"
+  base_dir: /srv/example-app/data/reviews
+  data_dir_template: "/srv/example-app/data/reviews/pr-{pr}"
+  sqlite_path_template: "/srv/example-app/data/reviews/pr-{pr}/app.db"
   seed_command:
     - docker
     - compose
     - -p
     - "{compose_project}"
     - -f
-    - "/opt/example-app/deploy/compose.review.yml"
+    - "/srv/example-app/deploy/compose.review.yml"
     - exec
     - -T
     - app
@@ -51,7 +51,7 @@ traefik:
   certresolver: letsencrypt
 
 state:
-  state_file: /var/lib/webhooker/state/example-review.json
+  state_file: /srv/example-app/webhooker/runtime/state/example-review.json
 
 wake:
-  wake_file: /var/lib/webhooker/wake/example-review
+  wake_file: /srv/example-app/webhooker/runtime/wake/example-review

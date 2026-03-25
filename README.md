@@ -172,22 +172,29 @@ docker compose -p <project-name> -f <compose-file> up -d --remove-orphans
 docker compose -p <project-name> -f <compose-file> down --remove-orphans
 ```
 
-That means the app deployment template must already exist on the deploy host. A common layout is:
+That means the app deployment template must already exist on the deploy host. A common layout is to keep everything for one app under a single self-contained root:
 
 ```text
-/opt/example-app/
+/srv/example-app/
 ├── deploy/
 │   ├── compose.review.yml
 │   └── compose.production.yml
-└── ...
-
-/etc/webhooker/projects/
-├── example-review.yaml
-└── example-production.yaml
-
-/srv/webhooker/
-├── reviews/example-app/
-└── production/example-app/
+├── secrets/
+│   ├── review.env
+│   └── production.env
+├── data/
+│   ├── reviews/
+│   └── production/
+└── webhooker/
+    ├── compose.yml
+    ├── env/
+    │   └── webhooker.env
+    ├── projects/
+    │   ├── example-review.yaml
+    │   └── example-production.yaml
+    └── runtime/
+        ├── state/
+        └── wake/
 ```
 
 If you are onboarding a new app, think of the setup in three pieces:
@@ -226,26 +233,25 @@ The settings for the deployed app are usually split into three groups:
 For most apps, a good layout is:
 
 ```text
-/opt/example-app/
-└── deploy/
-    ├── compose.review.yml
-    ├── compose.production.yml
-    ├── env/
-    │   ├── review.common.env
-    │   └── production.common.env
-    └── config/
-        ├── review.settings.toml
-        └── production.settings.toml
-
-/etc/example-app/
-├── review.secrets.env
-└── production.secrets.env
+/srv/example-app/
+├── deploy/
+│   ├── compose.review.yml
+│   ├── compose.production.yml
+│   ├── env/
+│   │   ├── review.common.env
+│   │   └── production.common.env
+│   └── config/
+│       ├── review.settings.toml
+│       └── production.settings.toml
+└── secrets/
+    ├── review.env
+    └── production.env
 ```
 
 That gives you a clean rule:
 
 - commit non-secret defaults in the app repo under `deploy/`
-- publish secrets to the server under `/etc/<app-name>/`
+- publish secrets to the server under `/srv/<app-name>/secrets/`
 - let the Compose template combine both at runtime
 
 ### Example: publishing runtime settings with Compose
@@ -258,11 +264,11 @@ services:
     image: ${APP_IMAGE}
     restart: unless-stopped
     env_file:
-      - /opt/example-app/deploy/env/production.common.env
-      - /etc/example-app/production.secrets.env
+      - /srv/example-app/deploy/env/production.common.env
+      - /srv/example-app/secrets/production.env
     volumes:
       - ${APP_DATA_DIR}:/data
-      - /opt/example-app/deploy/config/production.settings.toml:/app/config/settings.toml:ro
+      - /srv/example-app/deploy/config/production.settings.toml:/app/config/settings.toml:ro
     environment:
       APP_HOSTNAME: ${APP_HOSTNAME}
       SQLITE_PATH: ${APP_SQLITE_PATH}
@@ -271,10 +277,10 @@ services:
 In that example:
 
 - the image is published by app CI
-- the Compose template is published to `/opt/example-app/deploy/compose.production.yml`
-- non-secret environment settings are published to `/opt/example-app/deploy/env/production.common.env`
-- secret settings are published to `/etc/example-app/production.secrets.env`
-- a config file is published to `/opt/example-app/deploy/config/production.settings.toml`
+- the Compose template is published to `/srv/example-app/deploy/compose.production.yml`
+- non-secret environment settings are published to `/srv/example-app/deploy/env/production.common.env`
+- secret settings are published to `/srv/example-app/secrets/production.env`
+- a config file is published to `/srv/example-app/deploy/config/production.settings.toml`
 
 ### Who should publish those files
 
@@ -312,7 +318,7 @@ If you follow that split, `webhooker` stays small and generic, and the app keeps
 
 ### Example review Compose template for an app
 
-Store this on the deployment host, for example at `/opt/example-app/deploy/compose.review.yml`:
+Store this on the deployment host, for example at `/srv/example-app/deploy/compose.review.yml`:
 
 ```yaml
 services:
@@ -336,7 +342,7 @@ This file is just an app deployment template. `webhooker` will reuse the same te
 
 ### Example production Compose template for an app
 
-Store this on the deployment host, for example at `/opt/example-app/deploy/compose.production.yml`:
+Store this on the deployment host, for example at `/srv/example-app/deploy/compose.production.yml`:
 
 ```yaml
 services:
@@ -360,23 +366,24 @@ For production, the template is usually almost identical. The difference is in t
 
 ## Review deployment example
 
-`config/example.project.yaml` shows a complete review deployment example. It manages one Compose project per PR and stores review SQLite files under `/srv/webhooker/reviews/example-app/`.
+`config/example.project.yaml` shows a complete review deployment example. It manages one Compose project per PR and stores review SQLite files under `/srv/example-app/data/reviews/`.
 
 ### Step-by-step review setup
 
 1. Build preview images in your app CI.
    Use tags like `pr-<number>-<sha7>` so they match `image.tag_template`.
-2. Prepare the app deployment directory on the host.
-   Example: create `/opt/example-app/deploy/compose.review.yml`.
+2. Prepare the app root on the host.
+   Example: create `/srv/example-app/deploy/compose.review.yml`.
 3. Write the review Compose template for the app.
    The template should use `${APP_IMAGE}` and mount `${APP_DATA_DIR}` so each PR gets its own persistent SQLite file.
 4. Copy the webhooker config.
-   Start from `config/example.project.yaml` and save it as `/etc/webhooker/projects/example-review.yaml`.
+   Start from `config/example.project.yaml` and save it as `/srv/example-app/webhooker/projects/example-review.yaml`.
 5. Update the webhooker config fields.
-   Set the GitHub repository, image registry, domain, and point `deployment.compose_file` at `/opt/example-app/deploy/compose.review.yml`.
+   Set the GitHub repository, image registry, domain, and point `deployment.compose_file` at `/srv/example-app/deploy/compose.review.yml`.
 6. Create the runtime directories.
-   Example: `/srv/webhooker/reviews/example-app`, `/var/lib/webhooker/state`, and `/var/lib/webhooker/wake`.
+   Example: `/srv/example-app/data/reviews`, `/srv/example-app/webhooker/runtime/state`, and `/srv/example-app/webhooker/runtime/wake`.
    Those writable bind mounts must be owned by the unprivileged container user that runs `webhooker` in the published image, which is uid/gid `1000:1000` by default.
+   Mount the parent directories, not the `state_file` or `wake_file` paths themselves, so Docker never creates directories where those files should later appear.
 7. Configure secrets for the host services.
    Export the GitHub API token and webhook secret so both `webhooker-api` and `webhooker-worker` can read them.
 8. Expose the wake endpoint.
@@ -395,23 +402,24 @@ When a PR opens, synchronizes, or reopens, `webhooker` will:
 
 ## Production deployment example
 
-`config/example.production.yaml` shows a complete production deployment example. It tracks the `main` branch, deploys one Compose project, and stores SQLite backups under `/srv/webhooker/production/example-app/backups/`.
+`config/example.production.yaml` shows a complete production deployment example. It tracks the `main` branch, deploys one Compose project, and stores SQLite backups under `/srv/example-app/data/production/backups/`.
 
 ### Step-by-step production setup
 
 1. Build production images in your app CI.
    Use a stable tag pattern like `sha-<sha7>` so it matches `image.production_tag_template`.
-2. Prepare the app deployment directory on the host.
-   Example: create `/opt/example-app/deploy/compose.production.yml`.
+2. Prepare the app root on the host.
+   Example: create `/srv/example-app/deploy/compose.production.yml`.
 3. Write the production Compose template for the app.
    The template should mount `${APP_DATA_DIR}` so the SQLite file exists on the host and can be backed up before upgrades.
 4. Copy the webhooker config.
-   Start from `config/example.production.yaml` and save it as `/etc/webhooker/projects/example-production.yaml`.
+   Start from `config/example.production.yaml` and save it as `/srv/example-app/webhooker/projects/example-production.yaml`.
 5. Update the webhooker config fields.
-   Set repository, image path, branch name, hostname, and point `deployment.compose_file` at `/opt/example-app/deploy/compose.production.yml`.
+   Set repository, image path, branch name, hostname, and point `deployment.compose_file` at `/srv/example-app/deploy/compose.production.yml`.
 6. Create the runtime directories.
-   Example: `/srv/webhooker/production/example-app`, `/srv/webhooker/production/example-app/backups`, `/var/lib/webhooker/state`, and `/var/lib/webhooker/wake`.
+   Example: `/srv/example-app/data/production`, `/srv/example-app/data/production/backups`, `/srv/example-app/webhooker/runtime/state`, and `/srv/example-app/webhooker/runtime/wake`.
    Those writable bind mounts must be owned by the unprivileged container user that runs `webhooker` in the published image, which is uid/gid `1000:1000` by default.
+   Mount the parent directories, not the `state_file` or `wake_file` paths themselves.
 7. Configure secrets for the host services.
    Export the GitHub API token and webhook secret for the API and worker.
 8. Expose the wake endpoint.
@@ -451,35 +459,33 @@ You can pin that image by branch, tag, or SHA-based tag published by CI.
 ### Recommended host layout
 
 ```text
-/opt/webhooker/
-└── compose.yml
-
-/etc/webhooker/
-├── projects/
-│   ├── example-review.yaml
-│   └── example-production.yaml
-└── env/
-    └── webhooker.env
-
-/opt/example-app/
-└── deploy/
-    ├── compose.review.yml
-    ├── compose.production.yml
+/srv/example-app/
+├── deploy/
+│   ├── compose.review.yml
+│   ├── compose.production.yml
+│   ├── env/
+│   └── config/
+├── secrets/
+│   ├── review.env
+│   └── production.env
+├── data/
+│   ├── reviews/
+│   └── production/
+└── webhooker/
+    ├── compose.yml
     ├── env/
-    └── config/
-
-/var/lib/webhooker/
-├── state/
-└── wake/
-
-/srv/webhooker/
-├── reviews/
-└── production/
+    │   └── webhooker.env
+    ├── projects/
+    │   ├── example-review.yaml
+    │   └── example-production.yaml
+    └── runtime/
+        ├── state/
+        └── wake/
 ```
 
 ### Recommended webhooker Compose stack
 
-Store this on the deploy host, for example at `/opt/webhooker/compose.yml`:
+Store this on the deploy host, for example at `/srv/example-app/webhooker/compose.yml`:
 
 ```yaml
 services:
@@ -489,16 +495,16 @@ services:
     command:
       - webhooker-api
       - --config-dir
-      - /etc/webhooker/projects
+      - /srv/example-app/webhooker/projects
       - --host
       - 0.0.0.0
       - --port
       - "9100"
     env_file:
-      - /etc/webhooker/env/webhooker.env
+      - /srv/example-app/webhooker/env/webhooker.env
     volumes:
-      - /etc/webhooker/projects:/etc/webhooker/projects:ro
-      - /var/lib/webhooker/wake:/var/lib/webhooker/wake
+      - /srv/example-app/webhooker/projects:/srv/example-app/webhooker/projects:ro
+      - /srv/example-app/webhooker/runtime/wake:/srv/example-app/webhooker/runtime/wake
     ports:
       - "127.0.0.1:9100:9100"
 
@@ -510,18 +516,17 @@ services:
       - -lc
       - |
         while true; do
-          webhooker-worker --config-dir /etc/webhooker/projects
+          webhooker-worker --config-dir /srv/example-app/webhooker/projects
           sleep 60
         done
     env_file:
-      - /etc/webhooker/env/webhooker.env
+      - /srv/example-app/webhooker/env/webhooker.env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /etc/webhooker/projects:/etc/webhooker/projects:ro
-      - /opt/example-app/deploy:/opt/example-app/deploy:ro
-      - /var/lib/webhooker/state:/var/lib/webhooker/state
-      - /var/lib/webhooker/wake:/var/lib/webhooker/wake
-      - /srv/webhooker:/srv/webhooker
+      - /srv/example-app/webhooker/projects:/srv/example-app/webhooker/projects:ro
+      - /srv/example-app/webhooker/runtime/state:/srv/example-app/webhooker/runtime/state
+      - /srv/example-app/webhooker/runtime/wake:/srv/example-app/webhooker/runtime/wake
+      - /srv/example-app:/srv/example-app
 ```
 
 This setup keeps the trust boundary clean:
@@ -533,11 +538,10 @@ This setup keeps the trust boundary clean:
 ### Why these mounts are required
 
 - `/var/run/docker.sock`: lets the worker talk to the host Docker daemon
-- `/etc/webhooker/projects`: lets both containers read the `webhooker` project YAML files
-- `/opt/example-app/deploy`: lets the worker read the app Compose templates and app env/config files referenced by those templates
-- `/var/lib/webhooker/state`: stores persisted reconciliation state
-- `/var/lib/webhooker/wake`: stores wake files created by the API and consumed by the worker
-- `/srv/webhooker`: holds persistent review and production app data such as SQLite files and backups
+- `/srv/example-app/webhooker/projects`: lets both containers read the `webhooker` project YAML files
+- `/srv/example-app/webhooker/runtime/state`: stores persisted reconciliation state
+- `/srv/example-app/webhooker/runtime/wake`: stores wake files created by the API and consumed by the worker
+- `/srv/example-app`: gives the worker access to the app Compose templates, secrets, and persistent app data under one self-contained root
 
 ### Writable mount ownership
 
@@ -545,13 +549,13 @@ The published image runs both services as the unprivileged `webhooker` user, not
 
 At minimum, make these writable mounts owned by uid/gid `1000:1000` on the host:
 
-- `/var/lib/webhooker/state`
-- `/var/lib/webhooker/wake`
-- each app data root such as `/srv/webhooker/reviews/example-app` and `/srv/webhooker/production/example-app`
+- `/srv/example-app/webhooker/runtime/state`
+- `/srv/example-app/webhooker/runtime/wake`
+- each app data root such as `/srv/example-app/data/reviews` and `/srv/example-app/data/production`
 
 ### Recommended environment file for webhooker itself
 
-Store this on the host at `/etc/webhooker/env/webhooker.env`:
+Store this on the host at `/srv/example-app/webhooker/env/webhooker.env`:
 
 ```dotenv
 GITHUB_TOKEN=replace-me
@@ -564,21 +568,24 @@ If you manage multiple projects with different GitHub credentials, you can still
 
 ```bash
 mkdir -p \
-  /etc/webhooker/projects \
-  /etc/webhooker/env \
-  /var/lib/webhooker/state \
-  /var/lib/webhooker/wake \
-  /srv/webhooker/reviews/example-app \
-  /srv/webhooker/production/example-app
-chown -R 1000:1000 /var/lib/webhooker/state /var/lib/webhooker/wake /srv/webhooker
-docker compose -f /opt/webhooker/compose.yml up -d
+  /srv/example-app/deploy/env \
+  /srv/example-app/deploy/config \
+  /srv/example-app/secrets \
+  /srv/example-app/data/reviews \
+  /srv/example-app/data/production \
+  /srv/example-app/webhooker/projects \
+  /srv/example-app/webhooker/env \
+  /srv/example-app/webhooker/runtime/state \
+  /srv/example-app/webhooker/runtime/wake
+chown -R 1000:1000 /srv/example-app/data /srv/example-app/webhooker/runtime
+docker compose -f /srv/example-app/webhooker/compose.yml up -d
 ```
 
 After that:
 
 - point your reverse proxy at `127.0.0.1:9100`
 - configure the GitHub webhook to call `/github/<project_id>/wake`
-- place your app deployment templates and app config files under `/opt/<app-name>/deploy`
+- place your app deployment templates, secrets, and data under `/srv/<app-name>/`
 
 ## Security model
 
