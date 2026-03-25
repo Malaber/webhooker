@@ -1,9 +1,14 @@
+FROM docker:28-cli AS docker-cli
+
 FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-cli /usr/local/libexec/docker /usr/local/libexec/docker
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends tini \

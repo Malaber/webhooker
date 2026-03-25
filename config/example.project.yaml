@@ -12,6 +12,7 @@ github:
 deployment:
   mode: review
   compose_file: /srv/example-app/deploy/compose.review.yml
+  # The published webhooker image already includes the Docker CLI and Compose plugin.
   compose_bin: docker
   working_directory: /srv/example-app/deploy
   project_name_prefix: example-app-pr-

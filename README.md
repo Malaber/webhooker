@@ -635,7 +635,7 @@ python -m pytest
 
 ## Docker image
 
-The repository `Dockerfile` builds the image used for both the API container and the worker container.
+The repository `Dockerfile` builds the image used for both the API container and the worker container. It bundles the Docker CLI plus the Compose v2 plugin so the worker can use the mounted `/var/run/docker.sock` without installing extra packages on container start.
 
 ```bash
 docker build -t webhooker:local .
