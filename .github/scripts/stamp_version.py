@@ -30,6 +30,11 @@ def main() -> None:
         r"^version:\s*[^\n]+$",
         f"version: {version}",
     )
+    replace_pattern(
+        repo_root / "roles" / "webhooker" / "defaults" / "main.yml",
+        r'^webhooker_collection_version:\s*"[^"]+"$',
+        f'webhooker_collection_version: "{version}"',
+    )
 
 
 if __name__ == "__main__":

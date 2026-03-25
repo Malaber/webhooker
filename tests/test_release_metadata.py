@@ -8,6 +8,7 @@ def test_role_default_image_uses_installed_collection_version() -> None:
     assert "webhooker_collection_version" in defaults
     assert "ghcr.io/malaber/webhooker/webhooker:{{ webhooker_collection_version }}" in defaults
     assert ":main" not in defaults
+    assert "lookup('ansible.builtin.file'" not in defaults
 
 
 def test_examples_and_docs_do_not_recommend_main_image_tag() -> None:
@@ -24,10 +25,18 @@ def test_examples_and_docs_do_not_recommend_main_image_tag() -> None:
 def test_project_and_collection_versions_match() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
     galaxy = Path("galaxy.yml").read_text(encoding="utf-8")
+    defaults = Path("roles/webhooker/defaults/main.yml").read_text(encoding="utf-8")
 
     pyproject_match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
     galaxy_match = re.search(r"^version:\s*([^\n]+)$", galaxy, re.MULTILINE)
+    defaults_match = re.search(
+        r'^webhooker_collection_version:\s*"([^"]+)"$',
+        defaults,
+        re.MULTILINE,
+    )
 
     assert pyproject_match is not None
     assert galaxy_match is not None
+    assert defaults_match is not None
     assert pyproject_match.group(1) == galaxy_match.group(1).strip()
+    assert pyproject_match.group(1) == defaults_match.group(1)

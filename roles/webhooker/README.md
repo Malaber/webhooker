@@ -20,7 +20,7 @@ By default, the role keeps `webhooker`, app deployment files, secrets, and app d
 - `webhooker_env_dir`: directory that holds `webhooker.env`. Default: `/srv/webhooker/env`
 - `webhooker_state_dir`: directory for persisted worker state. Default: `/srv/webhooker/runtime/state`
 - `webhooker_wake_dir`: directory for wake files written by the API and consumed by the worker. Default: `/srv/webhooker/runtime/wake`
-- `webhooker_collection_version`: installed collection version, read from this collection's `galaxy.yml`, and used to pin the default image tag
+- `webhooker_collection_version`: collection release version stamped into the role defaults and used to pin the default image tag
 - `webhooker_image`: container image for both services. Default: `ghcr.io/malaber/webhooker/webhooker:<installed-collection-version>`
 - `webhooker_api_bind_address`: address used for the published API port. Default: `127.0.0.1`
 - `webhooker_api_port`: published API port. Default: `9100`
