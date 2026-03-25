@@ -543,6 +543,8 @@ This setup keeps the trust boundary clean:
 - `/srv/example-app/webhooker/runtime/wake`: stores wake files created by the API and consumed by the worker
 - `/srv/example-app`: gives the worker access to the app Compose templates, secrets, and persistent app data under one self-contained root
 
+If `/var/run/docker.sock` is owned by `root:<docker-gid>` with restrictive permissions, add that gid to the worker container as a supplemental group instead of running the worker as root.
+
 ### Writable mount ownership
 
 The published image runs both services as the unprivileged `webhooker` user, not as root. Any bind mount the API or worker must write to therefore needs host ownership or permissions that allow that user to write.

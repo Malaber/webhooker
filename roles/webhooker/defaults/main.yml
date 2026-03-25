@@ -20,6 +20,7 @@ webhooker_api_service_name: webhooker-api
 webhooker_worker_sleep_seconds: 60
 webhooker_container_uid: "1000"
 webhooker_container_gid: "1000"
+webhooker_worker_group_add: []
 
 webhooker_env: {}
 webhooker_projects: []

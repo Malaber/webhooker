@@ -34,6 +34,7 @@ By default, the role keeps `webhooker`, app deployment files, secrets, and app d
 - `webhooker_compose_pull`: whether the role runs `docker compose pull` before `up`. Default: `true`
 - `webhooker_container_uid`: numeric uid used by the unprivileged `webhooker` container user. Default: `"1000"`
 - `webhooker_container_gid`: numeric gid used by the unprivileged `webhooker` container user. Default: `"1000"`
+- `webhooker_worker_group_add`: supplemental groups added only to the worker container, typically the host gid of `/var/run/docker.sock`. Default: `[]`
 
 ### Runtime data
 
@@ -147,6 +148,8 @@ The role always adds these mounts by default for the worker:
 - `<webhooker_config_dir>:<webhooker_config_dir>:ro`
 - `<webhooker_state_dir>:<webhooker_state_dir>`
 - `<webhooker_wake_dir>:<webhooker_wake_dir>`
+
+If the host Docker socket is not world-readable, add its gid to `webhooker_worker_group_add` so the unprivileged worker can talk to the daemon without running the whole container as root. On most hosts you can inspect that gid with `stat -c '%g' /var/run/docker.sock`.
 
 ## Traefik Labels For webhooker-api
 
