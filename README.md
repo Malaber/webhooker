@@ -454,7 +454,7 @@ For this repository, that means:
 
 - `ghcr.io/malaber/webhooker/webhooker:<tag>`
 
-You can pin that image by branch, tag, or SHA-based tag published by CI.
+Stable releases publish both `<version>` and `latest`, but the recommended install pattern is to pin a concrete `<version>` tag in your own deployment config.
 
 ### Recommended host layout
 
@@ -490,7 +490,7 @@ Store this on the deploy host, for example at `/srv/example-app/webhooker/compos
 ```yaml
 services:
   webhooker-api:
-    image: ghcr.io/malaber/webhooker/webhooker:main
+    image: ghcr.io/malaber/webhooker/webhooker:<release-version>
     restart: unless-stopped
     command:
       - webhooker-api
@@ -509,7 +509,7 @@ services:
       - "127.0.0.1:9100:9100"
 
   webhooker-worker:
-    image: ghcr.io/malaber/webhooker/webhooker:main
+    image: ghcr.io/malaber/webhooker/webhooker:<release-version>
     restart: unless-stopped
     command:
       - /bin/sh
@@ -648,9 +648,9 @@ The GitHub Actions workflow:
 1. installs the project on Python 3.14
 2. runs Black, mypy, and pytest with coverage
 3. builds the production Docker image
-4. publishes the image to GHCR on successful pushes to `main` or version tags
+4. publishes the image to GHCR on successful pushes
 
-Pushes to `main` now compute the next patch version from git tags, publish the Docker image and Ansible Galaxy collection tarball for that same version, and push the matching git tag automatically. Pushes to non-`main` branches publish matching `-rc.<run>` prerelease versions so both artifacts stay aligned before merge. The repository root is the collection root, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
+Pushes to `main` now compute the next patch version from git tags, stamp that version into `pyproject.toml` and `galaxy.yml`, commit it back to `main`, and only then build and publish the Docker image and Ansible Galaxy collection tarball from that exact source. Stable releases publish both `<version>` and `latest` image tags, while non-`main` branch pushes publish matching `-rc.<run>` prerelease versions without moving `latest`. The repository root is the collection root, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
 
 ## Troubleshooting
 

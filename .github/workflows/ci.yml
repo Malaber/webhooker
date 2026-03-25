@@ -43,15 +43,62 @@ jobs:
     with:
       seed_version: "0.3.0"
 
-  build-docker:
+  prepare-release:
     needs:
       - test
       - version
     runs-on: ubuntu-latest
     outputs:
+      ready: ${{ steps.prepare.outputs.ready }}
+      source_sha: ${{ steps.prepare.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Stamp version commit on main before building release artifacts
+        id: prepare
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.version.outputs.release_version }}
+        run: |
+          if [ "$REF_NAME" != "main" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python .github/scripts/stamp_version.py "$RELEASE_VERSION"
+
+          if git diff --quiet -- pyproject.toml galaxy.yml; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml galaxy.yml
+          git commit -m "Release v$RELEASE_VERSION"
+          git push origin HEAD:main
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build-docker:
+    needs:
+      - test
+      - version
+      - prepare-release
+    if: github.event_name != 'push' || needs.prepare-release.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && needs.prepare-release.outputs.source_sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -75,18 +122,21 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: |
-            ${{ steps.image.outputs.image }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.image }}:sha-${{ github.event_name == 'push' && needs.prepare-release.outputs.source_sha || github.sha }}
 
   build-ansible-collection:
     needs:
       - test
       - version
-    if: github.event_name == 'push'
+      - prepare-release
+    if: github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       artifact_name: ${{ steps.artifact.outputs.name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.source_sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -110,10 +160,11 @@ jobs:
           path: dist/*.tar.gz
 
   release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true'
     needs:
       - test
       - version
+      - prepare-release
       - build-docker
       - build-ansible-collection
     runs-on: ubuntu-latest
@@ -121,16 +172,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.prepare-release.outputs.source_sha }}
       - name: Create or update git tag
         env:
           GIT_TAG: ${{ needs.version.outputs.git_tag }}
+          SOURCE_SHA: ${{ needs.prepare-release.outputs.source_sha }}
         run: |
           if git rev-parse "$GIT_TAG" >/dev/null 2>&1; then
             echo "Tag $GIT_TAG already exists."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag "$GIT_TAG" "$GITHUB_SHA"
+            git tag "$GIT_TAG" "$SOURCE_SHA"
             git push origin "$GIT_TAG"
           fi
       - name: Log in to GHCR
@@ -141,10 +194,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v3
       - name: Promote Docker image
+        env:
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          docker buildx imagetools create \
-            ${{ needs.build-docker.outputs.image }}:sha-${{ github.sha }} \
-            --tag ${{ needs.build-docker.outputs.image }}:${{ needs.version.outputs.release_version }}
+          if [ "$PRERELEASE" = "true" ]; then
+            docker buildx imagetools create \
+              ${{ needs.build-docker.outputs.image }}:sha-${{ needs.prepare-release.outputs.source_sha }} \
+              --tag ${{ needs.build-docker.outputs.image }}:${{ needs.version.outputs.release_version }}
+          else
+            docker buildx imagetools create \
+              ${{ needs.build-docker.outputs.image }}:sha-${{ needs.prepare-release.outputs.source_sha }} \
+              --tag ${{ needs.build-docker.outputs.image }}:${{ needs.version.outputs.release_version }} \
+              --tag ${{ needs.build-docker.outputs.image }}:latest
+          fi
       - name: Download collection artifact
         uses: actions/download-artifact@v4
         with:

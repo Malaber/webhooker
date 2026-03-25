@@ -1,5 +1,5 @@
 ---
-webhooker_image: ghcr.io/malaber/webhooker/webhooker:main
+webhooker_image: ghcr.io/malaber/webhooker/webhooker:{{ webhooker_collection_version }}
 webhooker_deploy_path: /srv/example-app/webhooker
 webhooker_config_dir: /srv/example-app/webhooker/projects
 webhooker_env_dir: /srv/example-app/webhooker/env
