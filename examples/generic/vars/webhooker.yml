@@ -17,8 +17,8 @@ webhooker_env:
 
 webhooker_container_uid: "1000"
 webhooker_container_gid: "1000"
-webhooker_worker_group_add:
-  - "998" # replace with: stat -c '%g' /var/run/docker.sock
+# Optional override. When left empty, the role auto-detects the gid of /var/run/docker.sock.
+webhooker_worker_group_add: []
 
 webhooker_worker_extra_mounts:
   - /srv/example-app:/srv/example-app

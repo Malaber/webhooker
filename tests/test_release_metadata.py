@@ -4,11 +4,14 @@ import re
 
 def test_role_default_image_uses_installed_collection_version() -> None:
     defaults = Path("roles/webhooker/defaults/main.yml").read_text(encoding="utf-8")
+    tasks = Path("roles/webhooker/tasks/main.yml").read_text(encoding="utf-8")
 
     assert "webhooker_collection_version" in defaults
     assert "ghcr.io/malaber/webhooker/webhooker:{{ webhooker_collection_version }}" in defaults
     assert ":main" not in defaults
     assert "lookup('ansible.builtin.file'" not in defaults
+    assert "Inspect Docker socket" in tasks
+    assert "webhooker_worker_effective_group_add" in tasks
 
 
 def test_examples_and_docs_do_not_recommend_main_image_tag() -> None:

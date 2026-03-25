@@ -17,6 +17,21 @@
       - (not webhooker_traefik_enabled) or (webhooker_api_hostname | length > 0)
     fail_msg: webhooker_api_hostname must be set when webhooker_traefik_enabled=true.
 
+- name: Inspect Docker socket
+  ansible.builtin.stat:
+    path: /var/run/docker.sock
+  register: webhooker_docker_socket
+  become: true
+
+- name: Derive worker supplemental groups
+  ansible.builtin.set_fact:
+    webhooker_worker_effective_group_add: >-
+      {{
+        webhooker_worker_group_add
+        if webhooker_worker_group_add | length > 0
+        else ([webhooker_docker_socket.stat.gid | string] if webhooker_docker_socket.stat.exists else [])
+      }}
+
 - name: Validate webhooker projects
   ansible.builtin.assert:
     that:

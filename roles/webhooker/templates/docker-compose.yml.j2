@@ -34,9 +34,9 @@ services:
   webhooker-worker:
     image: {{ webhooker_image | to_json }}
     restart: unless-stopped
-{% if webhooker_worker_group_add | length > 0 %}
+{% if webhooker_worker_effective_group_add | length > 0 %}
     group_add:
-{% for group in webhooker_worker_group_add %}
+{% for group in webhooker_worker_effective_group_add %}
       - {{ group | to_json }}
 {% endfor %}
 {% endif %}
