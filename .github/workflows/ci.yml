@@ -135,7 +135,7 @@ jobs:
       contents: write
     secrets: inherit
     with:
-      python_version: ${{ env.PYTHON_VERSION }}
+      python_version: "3.14"
       source_sha: ${{ needs.prepare-release.outputs.source_sha }}
       release_version: ${{ needs.version.outputs.release_version }}
       git_tag: ${{ needs.version.outputs.git_tag }}
