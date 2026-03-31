@@ -58,6 +58,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Stamp version into repository files
+        uses: Malaber/github-workflows/.github/actions/stamp-version@main
+        with:
+          version: ${{ needs.version.outputs.release_version }}
+          replacements: >-
+            [{"path":"pyproject.toml","pattern":"^version = \"[^\"]+\"$","replacement":"version = \"{version}\""},{"path":"galaxy.yml","pattern":"^version:\\s*[^\\n]+$","replacement":"version: {version}"},{"path":"roles/webhooker/defaults/main.yml","pattern":"^webhooker_collection_version:\\s*\"[^\"]+\"$","replacement":"webhooker_collection_version: \"{version}\""}]
       - name: Stamp version commit on main before building release artifacts
         id: prepare
         env:
@@ -69,8 +75,6 @@ jobs:
             echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          python .github/scripts/stamp_version.py "$RELEASE_VERSION"
 
           if git diff --quiet -- pyproject.toml galaxy.yml roles/webhooker/defaults/main.yml; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -103,7 +107,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Stamp release version into build metadata
-        run: python .github/scripts/stamp_version.py "${{ needs.version.outputs.release_version }}"
+        uses: Malaber/github-workflows/.github/actions/stamp-version@main
+        with:
+          version: ${{ needs.version.outputs.release_version }}
+          replacements: >-
+            [{"path":"pyproject.toml","pattern":"^version = \"[^\"]+\"$","replacement":"version = \"{version}\""},{"path":"galaxy.yml","pattern":"^version:\\s*[^\\n]+$","replacement":"version: {version}"},{"path":"roles/webhooker/defaults/main.yml","pattern":"^webhooker_collection_version:\\s*\"[^\"]+\"$","replacement":"webhooker_collection_version: \"{version}\""}]
       - name: Compute image name
         id: image
         env:
@@ -140,7 +148,8 @@ jobs:
       release_version: ${{ needs.version.outputs.release_version }}
       git_tag: ${{ needs.version.outputs.git_tag }}
       prerelease: ${{ needs.version.outputs.prerelease }}
-      stamp_command: python .github/scripts/stamp_version.py "${{ needs.version.outputs.release_version }}"
+      stamp_replacements: >-
+        [{"path":"pyproject.toml","pattern":"^version = \"[^\"]+\"$","replacement":"version = \"{version}\""},{"path":"galaxy.yml","pattern":"^version:\\s*[^\\n]+$","replacement":"version: {version}"},{"path":"roles/webhooker/defaults/main.yml","pattern":"^webhooker_collection_version:\\s*\"[^\"]+\"$","replacement":"webhooker_collection_version: \"{version}\""}]
       artifact_name: malaber-webhooker-${{ needs.version.outputs.release_version }}
 
   release:

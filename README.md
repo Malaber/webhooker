@@ -655,7 +655,7 @@ The GitHub Actions workflow:
 3. builds the production Docker image
 4. publishes the image to GHCR on successful pushes
 
-Pushes to `main` now compute the next patch version from git tags, stamp that version into `pyproject.toml` and `galaxy.yml`, commit it back to `main`, and only then build release artifacts from that exact source. The reusable versioning and Ansible collection release workflows now live in [`Malaber/github-workflows`](https://github.com/Malaber/github-workflows), so other repositories can share the same tag and GitHub Release flow. Stable releases publish both `<version>` and `latest` image tags, while non-`main` branch pushes publish matching `-rc.<run>` prerelease versions without moving `latest`. The repository root is the collection root, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
+Pushes to `main` now compute the next patch version from git tags, stamp that version into `pyproject.toml` and `galaxy.yml`, commit it back to `main`, and only then build release artifacts from that exact source. The reusable versioning, version-stamping, and Ansible collection release logic now live in [`Malaber/github-workflows`](https://github.com/Malaber/github-workflows), so other repositories can share the same tag and GitHub Release flow without keeping their own stamping script. Stable releases publish both `<version>` and `latest` image tags, while non-`main` branch pushes publish matching `-rc.<run>` prerelease versions without moving `latest`. The repository root is the collection root, and the release asset is published to the matching GitHub Release so another infra repo can install it directly.
 
 ## Troubleshooting
 
