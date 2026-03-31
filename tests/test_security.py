@@ -25,6 +25,10 @@ def test_missing_github_signature_returns_false() -> None:
     assert verify_github_signature("secret", b"body", None) is False
 
 
+def test_blank_github_secret_returns_false() -> None:
+    assert verify_github_signature(" \n\t ", b"body", "sha256=deadbeef") is False
+
+
 def test_signature_verification_strips_surrounding_secret_whitespace() -> None:
     body = b'{"hello":"world"}'
     signature = "sha256=" + hmac.new(b"supersecret", body, sha256).hexdigest()
