@@ -20,6 +20,7 @@ env:
 
 jobs:
   test:
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,12 +39,14 @@ jobs:
         run: python -m pytest
 
   version:
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')
     needs: test
     uses: Malaber/github-workflows/.github/workflows/reusable-version.yml@main
     with:
       seed_version: "0.3.0"
 
   prepare-release:
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')
     needs:
       - test
       - version
@@ -85,17 +88,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml galaxy.yml roles/webhooker/defaults/main.yml
-          git commit -m "Release v$RELEASE_VERSION [skip ci]"
+          git commit -m "Release v$RELEASE_VERSION"
           git push origin HEAD:main
           echo "ready=true" >> "$GITHUB_OUTPUT"
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build-docker:
+    if: (github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')) && (github.event_name != 'push' || needs.prepare-release.outputs.ready == 'true')
     needs:
       - test
       - version
       - prepare-release
-    if: github.event_name != 'push' || needs.prepare-release.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.image.outputs.image }}
@@ -133,11 +136,11 @@ jobs:
             ${{ steps.image.outputs.image }}:sha-${{ github.event_name == 'push' && needs.prepare-release.outputs.source_sha || github.sha }}
 
   release-ansible-collection:
+    if: (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v'))
     needs:
       - test
       - version
       - prepare-release
-    if: github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true'
     uses: Malaber/github-workflows/.github/workflows/reusable-ansible-collection-release.yml@main
     permissions:
       contents: write
@@ -153,7 +156,7 @@ jobs:
       artifact_name: malaber-webhooker-${{ needs.version.outputs.release_version }}
 
   release:
-    if: github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true'
+    if: (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v'))
     needs:
       - test
       - version
