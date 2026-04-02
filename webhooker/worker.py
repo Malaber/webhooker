@@ -24,13 +24,14 @@ def reconcile_project(
     github_client = github_client_factory(config)
     deployer = deployer_factory(config)
 
-    if config.deployment.mode == "review":
-        _reconcile_review_project(config, state, github_client, deployer)
-    else:
-        _reconcile_production_project(config, state, github_client, deployer)
-
-    save_state(config.state.state_file, state)
-    clear_wake_file(config.wake.wake_file)
+    try:
+        if config.deployment.mode == "review":
+            _reconcile_review_project(config, state, github_client, deployer)
+        else:
+            _reconcile_production_project(config, state, github_client, deployer)
+    finally:
+        save_state(config.state.state_file, state)
+        clear_wake_file(config.wake.wake_file)
 
 
 def _reconcile_review_project(

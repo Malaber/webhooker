@@ -71,6 +71,17 @@ class FakeDeployer:
         )
 
 
+class FailingReviewDeployer(FakeDeployer):
+    def __init__(self, config: ProjectConfig, failing_pr: int) -> None:
+        super().__init__(config)
+        self.failing_pr = failing_pr
+
+    def deploy_review(self, pr: PullRequestInfo) -> DeployedReview:
+        if pr.number == self.failing_pr:
+            raise RuntimeError(f"simulated deploy failure for pr {pr.number}")
+        return super().deploy_review(pr)
+
+
 def test_new_review_pr_causes_deploy(review_project_config) -> None:
     deployer = FakeDeployer(review_project_config)
     prs = [PullRequestInfo(number=5, head_sha="abcdef123456", state="open")]
@@ -144,6 +155,42 @@ def test_closed_review_pr_causes_cleanup(review_project_config) -> None:
 
     assert deployer.review_removed == [7]
     assert deployer.review_deployed == []
+
+
+def test_stale_review_cleanup_is_saved_even_when_later_deploy_fails(review_project_config) -> None:
+    save_state(
+        review_project_config.state.state_file,
+        ProjectState(
+            project_id=review_project_config.project_id,
+            reviews={
+                7: DeployedReview(
+                    pr=7,
+                    sha="abcdef0",
+                    compose_project="demo-pr-7",
+                    hostname="pr-7.review.example.test",
+                    data_dir="/tmp/demo/pr-7",
+                    sqlite_path="/tmp/demo/pr-7/app.db",
+                    image="ghcr.io/example/repo:pr-7-abcdef0",
+                )
+            },
+        ),
+    )
+    deployer = FailingReviewDeployer(review_project_config, failing_pr=8)
+    prs = [PullRequestInfo(number=8, head_sha="newsha123456", state="open")]
+
+    with pytest.raises(RuntimeError, match="simulated deploy failure"):
+        reconcile_project(
+            review_project_config,
+            github_client_factory=lambda _: FakeReviewGitHubClient(review_project_config, prs),
+            deployer_factory=lambda _: deployer,
+        )
+
+    persisted = ProjectState.model_validate_json(
+        review_project_config.state.state_file.read_text(encoding="utf-8")
+    )
+
+    assert deployer.review_removed == [7]
+    assert 7 not in persisted.reviews
 
 
 def test_production_sha_change_causes_single_redeploy(production_project_config) -> None:
