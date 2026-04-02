@@ -32,16 +32,160 @@ def test_review_deploy_seeds_only_on_first_creation(
     review_project_config.preview.seed_command = ["echo", "{compose_project}"]
 
     first = deployer.deploy_review(PullRequestInfo(number=3, head_sha="abcdef123456", state="open"))
+    Path(first.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(first.sqlite_path).write_text("db", encoding="utf-8")
     second = deployer.deploy_review(
-        PullRequestInfo(number=3, head_sha="fedcba654321", state="open")
+        PullRequestInfo(number=3, head_sha="fedcba654321", state="open"),
+        previous=first,
     )
 
     assert first.compose_project == "demo-pr-3"
     assert second.sqlite_path == first.sqlite_path
-    assert commands[0][0][:3] == ["docker", "compose", "-p"]
-    assert commands[0][1]["APP_IMAGE"] == "ghcr.io/example/repo:pr-3-abcdef1"
-    assert commands[1][0] == ["echo", "demo-pr-3"]
-    assert len(commands) == 3
+    assert commands[0][0] == ["docker", "pull", "ghcr.io/example/repo:pr-3-abcdef1"]
+    assert commands[1][0][:3] == ["docker", "compose", "-p"]
+    assert commands[1][1]["APP_IMAGE"] == "ghcr.io/example/repo:pr-3-abcdef1"
+    assert commands[2][0] == ["echo", "demo-pr-3"]
+    assert commands[3][0] == ["docker", "pull", "ghcr.io/example/repo:pr-3-fedcba6"]
+    assert commands[4][0][:3] == ["docker", "compose", "-p"]
+    assert len(commands) == 5
+
+
+def test_review_deploy_uses_placeholder_when_review_image_is_missing(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compose_path = Path(review_project_config.deployment.working_directory) / "compose.review.yml"
+    compose_path.write_text(
+        """
+services:
+  app:
+    image: ${APP_IMAGE}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${TRAEFIK_ROUTER}.rule=Host(`${APP_HOSTNAME}`)
+      - traefik.http.services.${TRAEFIK_SERVICE}.loadbalancer.server.port=8000
+    networks:
+      - edge
+networks:
+  edge:
+    external: true
+""".strip(),
+        encoding="utf-8",
+    )
+    review_project_config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(review_project_config)
+    commands: list[tuple[list[str], dict[str, str]]] = []
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is True
+        commands.append((argv, env))
+        if argv[:2] == ["docker", "pull"]:
+            raise subprocess.CalledProcessError(
+                1,
+                argv,
+                stderr="manifest unknown: manifest unknown",
+            )
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    deployed = deployer.deploy_review(
+        PullRequestInfo(number=9, head_sha="abcdef123456", state="open")
+    )
+
+    placeholder_dir = (
+        Path(review_project_config.preview.base_dir) / ".webhooker-placeholder" / "pr-9"
+    )
+    placeholder_compose = placeholder_dir / "compose.yml"
+    placeholder_html = placeholder_dir / "index.html"
+
+    assert deployed.placeholder_active is True
+    assert deployed.image == "ghcr.io/example/repo:pr-9-abcdef1"
+    assert commands[0][0] == ["docker", "pull", "ghcr.io/example/repo:pr-9-abcdef1"]
+    assert commands[1][0][:6] == [
+        "docker",
+        "compose",
+        "-p",
+        "demo-pr-9",
+        "-f",
+        str(placeholder_compose),
+    ]
+    assert placeholder_compose.exists()
+    assert placeholder_html.exists()
+    assert "webhooker is still loading your deployment for repo" in placeholder_html.read_text(
+        encoding="utf-8"
+    )
+    assert "python:3.14-alpine" in placeholder_compose.read_text(encoding="utf-8")
+
+
+def test_review_deploy_reraises_pull_errors_that_are_not_missing_images(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env, check
+        if argv[:2] == ["docker", "pull"]:
+            raise subprocess.CalledProcessError(1, argv, stderr="tls handshake timeout")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        deployer.deploy_review(PullRequestInfo(number=9, head_sha="abcdef123456", state="open"))
+
+    assert excinfo.value.stderr == "tls handshake timeout"
+
+
+def test_review_deploy_seeds_when_replacing_placeholder_without_existing_sqlite(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+    commands: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env, check
+        commands.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert review_project_config.preview is not None
+    review_project_config.preview.seed_command = ["echo", "{compose_project}"]
+
+    deployed = deployer.deploy_review(
+        PullRequestInfo(number=4, head_sha="abcdef123456", state="open"),
+        previous=DeployedReview(
+            pr=4,
+            sha="abcdef123456",
+            compose_project="demo-pr-4",
+            hostname="pr-4.review.example.test",
+            data_dir=deployer.data_dir_for_pr(4),
+            sqlite_path=deployer.sqlite_path_for_pr(4),
+            image="ghcr.io/example/repo:pr-4-abcdef1",
+            placeholder_active=True,
+        ),
+    )
+
+    assert deployed.placeholder_active is False
+    assert commands[0] == ["docker", "pull", "ghcr.io/example/repo:pr-4-abcdef1"]
+    assert commands[2] == ["echo", "demo-pr-4"]
 
 
 def test_remove_review_runs_compose_down_and_deletes_data_dir(
@@ -83,6 +227,151 @@ def test_remove_review_runs_compose_down_and_deletes_data_dir(
     assert recorded[0][1]["APP_DATA_DIR"] == str(data_dir)
     assert recorded[0][1]["APP_HOSTNAME"] == "pr-4.review.example.test"
     assert not data_dir.exists()
+
+
+def test_remove_review_uses_placeholder_compose_file_when_placeholder_is_active(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    deployer = Deployer(review_project_config)
+    data_dir = tmp_path / "preview"
+    data_dir.mkdir()
+    placeholder_dir = (
+        Path(review_project_config.preview.base_dir) / ".webhooker-placeholder" / "pr-4"
+    )
+    placeholder_dir.mkdir(parents=True)
+    placeholder_compose = placeholder_dir / "compose.yml"
+    placeholder_compose.write_text("services: {}\n", encoding="utf-8")
+
+    recorded: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env, check
+        recorded.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    deployer.remove_review(
+        DeployedReview(
+            pr=4,
+            sha="abcdef0",
+            compose_project="demo-pr-4",
+            hostname="pr-4.review.example.test",
+            data_dir=str(data_dir),
+            sqlite_path=str(data_dir / "db.sqlite3"),
+            image="ghcr.io/example/repo:pr-4-abcdef0",
+            placeholder_active=True,
+        )
+    )
+
+    assert recorded[0][5] == str(placeholder_compose)
+    assert not placeholder_dir.exists()
+
+
+def test_placeholder_service_template_requires_mapping_document(review_project_config) -> None:
+    compose_path = Path(review_project_config.deployment.working_directory) / "compose.review.yml"
+    compose_path.write_text("- just\n- a\n- list\n", encoding="utf-8")
+    review_project_config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(review_project_config)
+
+    with pytest.raises(RuntimeError, match="YAML mapping"):
+        deployer._placeholder_service_template()
+
+
+def test_placeholder_service_template_requires_services(review_project_config) -> None:
+    compose_path = Path(review_project_config.deployment.working_directory) / "compose.review.yml"
+    compose_path.write_text("services: {}\n", encoding="utf-8")
+    review_project_config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(review_project_config)
+
+    with pytest.raises(RuntimeError, match="at least one service"):
+        deployer._placeholder_service_template()
+
+
+def test_placeholder_service_template_rejects_non_mapping_services(review_project_config) -> None:
+    compose_path = Path(review_project_config.deployment.working_directory) / "compose.review.yml"
+    compose_path.write_text(
+        """
+services:
+  app:
+    - invalid
+""".strip(),
+        encoding="utf-8",
+    )
+    review_project_config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(review_project_config)
+
+    with pytest.raises(RuntimeError, match="service entries must be YAML mappings"):
+        deployer._placeholder_service_template()
+
+
+def test_placeholder_service_template_prefers_traefik_labels_and_ignores_bad_networks(
+    review_project_config,
+) -> None:
+    compose_path = Path(review_project_config.deployment.working_directory) / "compose.review.yml"
+    compose_path.write_text(
+        """
+services:
+  worker:
+    image: worker
+  app:
+    image: ${APP_IMAGE}
+    labels:
+      traefik.enable: "true"
+    networks:
+      - edge
+networks:
+  - not-a-mapping
+""".strip(),
+        encoding="utf-8",
+    )
+    review_project_config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(review_project_config)
+
+    service_template, top_level_networks = deployer._placeholder_service_template()
+
+    assert service_template["networks"] == ["edge"]
+    assert top_level_networks == {}
+    assert deployer._service_uses_traefik({"traefik.enable": "true"}) is True
+
+
+def test_placeholder_service_template_falls_back_to_first_service(
+    review_project_config,
+) -> None:
+    compose_path = Path(review_project_config.deployment.working_directory) / "compose.review.yml"
+    compose_path.write_text(
+        """
+services:
+  app:
+    image: ${APP_IMAGE}
+    networks:
+      - edge
+""".strip(),
+        encoding="utf-8",
+    )
+    review_project_config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(review_project_config)
+
+    service_template, top_level_networks = deployer._placeholder_service_template()
+
+    assert service_template["networks"] == ["edge"]
+    assert top_level_networks == {}
+
+
+def test_app_display_name_falls_back_to_project_id_when_repository_is_empty(
+    review_project_config,
+) -> None:
+    review_project_config.image.repository = ""
+    deployer = Deployer(review_project_config)
+
+    assert deployer._app_display_name() == review_project_config.project_id
 
 
 def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(

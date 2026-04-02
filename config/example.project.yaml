@@ -23,6 +23,8 @@ image:
   registry: ghcr.io
   repository: your-github-user-or-org/example-app
   tag_template: "pr-{pr}-{sha7}"
+  # If this tag is not available yet, webhooker temporarily serves a loading page
+  # on the review hostname and retries the real image on later reconciles.
 
 preview:
   base_dir: /srv/example-app/data/reviews

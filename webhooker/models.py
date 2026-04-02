@@ -121,6 +121,7 @@ class DeployedReview(BaseModel):
     data_dir: str
     sqlite_path: str
     image: str
+    placeholder_active: bool = False
     config_fingerprint: str | None = None
 
 

@@ -45,7 +45,12 @@ class FakeDeployer:
     def deployment_fingerprint(self) -> str:
         return self.config_fingerprint
 
-    def deploy_review(self, pr: PullRequestInfo) -> DeployedReview:
+    def deploy_review(
+        self,
+        pr: PullRequestInfo,
+        previous: DeployedReview | None = None,
+    ) -> DeployedReview:
+        del previous
         self.review_deployed.append(pr.number)
         return DeployedReview(
             pr=pr.number,
@@ -84,7 +89,12 @@ class FailingReviewDeployer(FakeDeployer):
         super().__init__(config)
         self.failing_pr = failing_pr
 
-    def deploy_review(self, pr: PullRequestInfo) -> DeployedReview:
+    def deploy_review(
+        self,
+        pr: PullRequestInfo,
+        previous: DeployedReview | None = None,
+    ) -> DeployedReview:
+        del previous
         if pr.number == self.failing_pr:
             raise RuntimeError(f"simulated deploy failure for pr {pr.number}")
         return super().deploy_review(pr)
@@ -222,6 +232,38 @@ def test_review_config_change_causes_redeploy_without_sha_change(review_project_
     )
     deployer = FakeDeployer(review_project_config)
     deployer.config_fingerprint = "new-fingerprint"
+    prs = [PullRequestInfo(number=5, head_sha="same-sha-123456", state="open")]
+
+    reconcile_project(
+        review_project_config,
+        github_client_factory=lambda _: FakeReviewGitHubClient(review_project_config, prs),
+        deployer_factory=lambda _: deployer,
+    )
+
+    assert deployer.review_removed == []
+    assert deployer.review_deployed == [5]
+
+
+def test_placeholder_review_is_retried_without_sha_change(review_project_config) -> None:
+    save_state(
+        review_project_config.state.state_file,
+        ProjectState(
+            project_id=review_project_config.project_id,
+            reviews={
+                5: DeployedReview(
+                    pr=5,
+                    sha="same-sha-123456",
+                    compose_project="demo-pr-5",
+                    hostname="pr-5.review.example.test",
+                    data_dir="/tmp/demo/pr-5",
+                    sqlite_path="/tmp/demo/pr-5/app.db",
+                    image="ghcr.io/example/repo:pr-5-same-sh",
+                    placeholder_active=True,
+                )
+            },
+        ),
+    )
+    deployer = FakeDeployer(review_project_config)
     prs = [PullRequestInfo(number=5, head_sha="same-sha-123456", state="open")]
 
     reconcile_project(
