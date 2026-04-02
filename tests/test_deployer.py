@@ -230,7 +230,9 @@ services:
     ]
 
 
-def test_compose_env_file_paths_ignore_non_mapping_documents(review_project_config, tmp_path: Path) -> None:
+def test_compose_env_file_paths_ignore_non_mapping_documents(
+    review_project_config, tmp_path: Path
+) -> None:
     compose_path = tmp_path / "compose.yml"
     compose_path.write_text("- just\n- a\n- list\n", encoding="utf-8")
     config = review_project_config.model_copy(deep=True)
