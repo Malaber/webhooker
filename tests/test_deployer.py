@@ -54,7 +54,7 @@ def test_remove_review_runs_compose_down_and_deletes_data_dir(
     data_dir.mkdir()
     (data_dir / "db.sqlite3").write_text("demo", encoding="utf-8")
 
-    recorded: list[list[str]] = []
+    recorded: list[tuple[list[str], dict[str, str]]] = []
 
     def fake_run(
         argv: list[str],
@@ -62,7 +62,7 @@ def test_remove_review_runs_compose_down_and_deletes_data_dir(
         env: dict[str, str],
         check: bool,
     ) -> subprocess.CompletedProcess[str]:
-        recorded.append(argv)
+        recorded.append((argv, env))
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -79,7 +79,9 @@ def test_remove_review_runs_compose_down_and_deletes_data_dir(
         )
     )
 
-    assert recorded[0][-3:] == ["down", "-v", "--remove-orphans"]
+    assert recorded[0][0][-3:] == ["down", "-v", "--remove-orphans"]
+    assert recorded[0][1]["APP_DATA_DIR"] == str(data_dir)
+    assert recorded[0][1]["APP_HOSTNAME"] == "pr-4.review.example.test"
     assert not data_dir.exists()
 
 
@@ -100,7 +102,7 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
     for idx in range(1, 4):
         (backup_dir / f"app-2024010100000{idx}.db").write_text("old", encoding="utf-8")
 
-    commands: list[list[str]] = []
+    commands: list[tuple[list[str], dict[str, str]]] = []
 
     def fake_run(
         argv: list[str],
@@ -108,7 +110,7 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
         env: dict[str, str],
         check: bool,
     ) -> subprocess.CompletedProcess[str]:
-        commands.append(argv)
+        commands.append((argv, env))
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -128,8 +130,9 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
 
     backups = sorted(backup_dir.glob("app-*.db"))
 
-    assert commands[0][-2:] == ["down", "--remove-orphans"]
-    assert commands[1][-3:] == ["up", "-d", "--remove-orphans"]
+    assert commands[0][0][-2:] == ["down", "--remove-orphans"]
+    assert commands[0][1]["APP_IMAGE"] == "ghcr.io/example/repo:sha-oldsha1"
+    assert commands[1][0][-3:] == ["up", "-d", "--remove-orphans"]
     assert deployed.image == "ghcr.io/example/repo:sha-abcdef1"
     assert len(backups) == 3
 

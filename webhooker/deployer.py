@@ -85,6 +85,26 @@ class Deployer:
             )
             raise PermissionError(message) from exc
 
+    def _compose_env(
+        self,
+        *,
+        image: str,
+        hostname: str,
+        data_dir: str,
+        sqlite_path: str,
+        traefik_router: str,
+        traefik_service: str,
+    ) -> dict[str, str]:
+        return {
+            "APP_IMAGE": image,
+            "APP_HOSTNAME": hostname,
+            "APP_DATA_DIR": data_dir,
+            "APP_SQLITE_PATH": sqlite_path,
+            "TRAEFIK_ROUTER": traefik_router,
+            "TRAEFIK_SERVICE": traefik_service,
+            "TRAEFIK_CERTRESOLVER": self.config.traefik.certresolver,
+        }
+
     def _compose_up(self, compose_project: str, extra_env: dict[str, str]) -> None:
         logger.info("Deploying compose project=%s", compose_project)
         self._run(
@@ -102,7 +122,12 @@ class Deployer:
             env=extra_env,
         )
 
-    def _compose_down(self, compose_project: str, remove_volumes: bool) -> None:
+    def _compose_down(
+        self,
+        compose_project: str,
+        remove_volumes: bool,
+        extra_env: dict[str, str] | None = None,
+    ) -> None:
         logger.info("Stopping compose project=%s", compose_project)
         argv = [
             self.config.deployment.compose_bin,
@@ -116,7 +141,7 @@ class Deployer:
         if remove_volumes:
             argv.append("-v")
         argv.append("--remove-orphans")
-        self._run(argv)
+        self._run(argv, env=extra_env)
 
     def _seed(self, command_template: list[str], compose_project: str) -> None:
         if not command_template:
@@ -141,15 +166,14 @@ class Deployer:
         is_first_creation = not data_dir.exists()
 
         self._ensure_dir(data_dir, "review data directory")
-        extra_env = {
-            "APP_IMAGE": image,
-            "APP_HOSTNAME": hostname,
-            "APP_DATA_DIR": str(data_dir),
-            "APP_SQLITE_PATH": sqlite_path,
-            "TRAEFIK_ROUTER": compose_project,
-            "TRAEFIK_SERVICE": compose_project,
-            "TRAEFIK_CERTRESOLVER": self.config.traefik.certresolver,
-        }
+        extra_env = self._compose_env(
+            image=image,
+            hostname=hostname,
+            data_dir=str(data_dir),
+            sqlite_path=sqlite_path,
+            traefik_router=compose_project,
+            traefik_service=compose_project,
+        )
         self._compose_up(compose_project, extra_env)
         if is_first_creation:
             self._seed(preview.seed_command, compose_project)
@@ -166,7 +190,18 @@ class Deployer:
 
     def remove_review(self, deployed: DeployedReview) -> None:
         try:
-            self._compose_down(deployed.compose_project, remove_volumes=True)
+            self._compose_down(
+                deployed.compose_project,
+                remove_volumes=True,
+                extra_env=self._compose_env(
+                    image=deployed.image,
+                    hostname=deployed.hostname,
+                    data_dir=deployed.data_dir,
+                    sqlite_path=deployed.sqlite_path,
+                    traefik_router=deployed.compose_project,
+                    traefik_service=deployed.compose_project,
+                ),
+            )
         finally:
             shutil.rmtree(deployed.data_dir, ignore_errors=True)
 
@@ -183,18 +218,28 @@ class Deployer:
 
         self._ensure_dir(data_dir, "production data directory")
         if previous is not None:
-            self._compose_down(compose_project, remove_volumes=False)
+            self._compose_down(
+                compose_project,
+                remove_volumes=False,
+                extra_env=self._compose_env(
+                    image=previous.image,
+                    hostname=previous.hostname,
+                    data_dir=previous.data_dir,
+                    sqlite_path=previous.sqlite_path,
+                    traefik_router=previous.compose_project,
+                    traefik_service=previous.compose_project,
+                ),
+            )
             self._backup_sqlite(sqlite_path)
 
-        extra_env = {
-            "APP_IMAGE": image,
-            "APP_HOSTNAME": hostname,
-            "APP_DATA_DIR": str(data_dir),
-            "APP_SQLITE_PATH": str(sqlite_path),
-            "TRAEFIK_ROUTER": compose_project,
-            "TRAEFIK_SERVICE": compose_project,
-            "TRAEFIK_CERTRESOLVER": self.config.traefik.certresolver,
-        }
+        extra_env = self._compose_env(
+            image=image,
+            hostname=hostname,
+            data_dir=str(data_dir),
+            sqlite_path=str(sqlite_path),
+            traefik_router=compose_project,
+            traefik_service=compose_project,
+        )
         self._compose_up(compose_project, extra_env)
         if not sqlite_existed:
             self._seed(production.seed_command, compose_project)
