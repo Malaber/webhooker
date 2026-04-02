@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from webhooker.models import (
@@ -35,9 +37,13 @@ class FakeProductionGitHubClient:
 class FakeDeployer:
     def __init__(self, config: ProjectConfig) -> None:
         self.config = config
+        self.config_fingerprint = "fingerprint-v1"
         self.review_deployed: list[int] = []
         self.review_removed: list[int] = []
         self.production_deployed: list[str] = []
+
+    def deployment_fingerprint(self) -> str:
+        return self.config_fingerprint
 
     def deploy_review(self, pr: PullRequestInfo) -> DeployedReview:
         self.review_deployed.append(pr.number)
@@ -49,6 +55,7 @@ class FakeDeployer:
             data_dir=f"/tmp/demo/pr-{pr.number}",
             sqlite_path=f"/tmp/demo/pr-{pr.number}/app.db",
             image=f"ghcr.io/example/repo:pr-{pr.number}-{pr.head_sha[:7]}",
+            config_fingerprint=self.deployment_fingerprint(),
         )
 
     def remove_review(self, deployed: DeployedReview) -> None:
@@ -68,6 +75,7 @@ class FakeDeployer:
             sqlite_path="/tmp/demo/production/app.db",
             image=f"ghcr.io/example/repo:sha-{sha[:7]}",
             branch="main",
+            config_fingerprint=self.deployment_fingerprint(),
         )
 
 
@@ -186,11 +194,44 @@ def test_stale_review_cleanup_is_saved_even_when_later_deploy_fails(review_proje
         )
 
     persisted = ProjectState.model_validate_json(
-        review_project_config.state.state_file.read_text(encoding="utf-8")
+        Path(review_project_config.state.state_file).read_text(encoding="utf-8")
     )
 
     assert deployer.review_removed == [7]
     assert 7 not in persisted.reviews
+
+
+def test_review_config_change_causes_redeploy_without_sha_change(review_project_config) -> None:
+    save_state(
+        review_project_config.state.state_file,
+        ProjectState(
+            project_id=review_project_config.project_id,
+            reviews={
+                5: DeployedReview(
+                    pr=5,
+                    sha="same-sha-123456",
+                    compose_project="demo-pr-5",
+                    hostname="pr-5.review.example.test",
+                    data_dir="/tmp/demo/pr-5",
+                    sqlite_path="/tmp/demo/pr-5/app.db",
+                    image="ghcr.io/example/repo:pr-5-same-sh",
+                    config_fingerprint="old-fingerprint",
+                )
+            },
+        ),
+    )
+    deployer = FakeDeployer(review_project_config)
+    deployer.config_fingerprint = "new-fingerprint"
+    prs = [PullRequestInfo(number=5, head_sha="same-sha-123456", state="open")]
+
+    reconcile_project(
+        review_project_config,
+        github_client_factory=lambda _: FakeReviewGitHubClient(review_project_config, prs),
+        deployer_factory=lambda _: deployer,
+    )
+
+    assert deployer.review_removed == []
+    assert deployer.review_deployed == [5]
 
 
 def test_production_sha_change_causes_single_redeploy(production_project_config) -> None:
@@ -236,6 +277,40 @@ def test_new_production_deploy_is_created(production_project_config) -> None:
     )
 
     assert deployer.production_deployed == ["newsha123456"]
+
+
+def test_production_config_change_causes_redeploy_without_sha_change(
+    production_project_config,
+) -> None:
+    save_state(
+        production_project_config.state.state_file,
+        ProjectState(
+            project_id=production_project_config.project_id,
+            production=DeployedProduction(
+                sha="same-sha-123456",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir="/tmp/demo/production",
+                sqlite_path="/tmp/demo/production/app.db",
+                image="ghcr.io/example/repo:sha-same-sh",
+                branch="main",
+                config_fingerprint="old-fingerprint",
+            ),
+        ),
+    )
+    deployer = FakeDeployer(production_project_config)
+    deployer.config_fingerprint = "new-fingerprint"
+
+    reconcile_project(
+        production_project_config,
+        github_client_factory=lambda _: FakeProductionGitHubClient(
+            production_project_config,
+            "same-sha-123456",
+        ),
+        deployer_factory=lambda _: deployer,
+    )
+
+    assert deployer.production_deployed == ["same-sha-123456"]
 
 
 def test_production_without_config_raises(review_project_config) -> None:

@@ -121,6 +121,7 @@ class DeployedReview(BaseModel):
     data_dir: str
     sqlite_path: str
     image: str
+    config_fingerprint: str | None = None
 
 
 class DeployedProduction(BaseModel):
@@ -131,6 +132,7 @@ class DeployedProduction(BaseModel):
     sqlite_path: str
     image: str
     branch: str
+    config_fingerprint: str | None = None
 
 
 class ProjectState(BaseModel):
