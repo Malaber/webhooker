@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+
+import yaml
 
 from webhooker.models import (
     DeployedProduction,
@@ -23,6 +27,29 @@ logger = logging.getLogger(__name__)
 class Deployer:
     def __init__(self, config: ProjectConfig) -> None:
         self.config = config
+
+    def deployment_fingerprint(self) -> str:
+        digest = hashlib.sha256()
+        payload = {
+            "deployment": self.config.deployment.model_dump(mode="json"),
+            "image": self.config.image.model_dump(mode="json"),
+            "preview": self.config.preview.model_dump(mode="json") if self.config.preview else None,
+            "production": (
+                self.config.production.model_dump(mode="json") if self.config.production else None
+            ),
+            "traefik": self.config.traefik.model_dump(mode="json"),
+        }
+        digest.update(json.dumps(payload, sort_keys=True).encode("utf-8"))
+
+        for path in self._deployment_input_paths():
+            digest.update(str(path).encode("utf-8"))
+            if path.exists():
+                digest.update(b"present\0")
+                digest.update(path.read_bytes())
+            else:
+                digest.update(b"missing\0")
+
+        return digest.hexdigest()
 
     def compose_project_name(self, pr: int) -> str:
         return f"{self.config.deployment.project_name_prefix}{pr}"
@@ -56,6 +83,52 @@ class Deployer:
         if self.config.preview is None:
             raise RuntimeError("preview configuration is required for review deployments")
         return self.config.preview
+
+    def _compose_file_path(self) -> Path:
+        compose_path = Path(self.config.deployment.compose_file)
+        if compose_path.is_absolute():
+            return compose_path
+        return Path(self.config.deployment.working_directory) / compose_path
+
+    def _deployment_input_paths(self) -> list[Path]:
+        compose_path = self._compose_file_path()
+        input_paths: dict[str, Path] = {str(compose_path): compose_path}
+        if compose_path.exists():
+            for path in self._compose_env_file_paths(compose_path):
+                input_paths[str(path)] = path
+        return [input_paths[key] for key in sorted(input_paths)]
+
+    def _compose_env_file_paths(self, compose_path: Path) -> list[Path]:
+        loaded = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            return []
+        services = loaded.get("services")
+        if not isinstance(services, dict):
+            return []
+
+        env_paths: dict[str, Path] = {}
+        for service in services.values():
+            if not isinstance(service, dict):
+                continue
+            for entry in self._normalize_env_file_entries(service.get("env_file")):
+                path = Path(entry)
+                if not path.is_absolute():
+                    path = compose_path.parent / path
+                env_paths[str(path)] = path
+        return [env_paths[key] for key in sorted(env_paths)]
+
+    def _normalize_env_file_entries(self, value: object) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            entries: list[str] = []
+            for item in value:
+                if isinstance(item, str):
+                    entries.append(item)
+                elif isinstance(item, dict) and isinstance(item.get("path"), str):
+                    entries.append(item["path"])
+            return entries
+        return []
 
     def _production_config(self) -> ProductionConfig:
         if self.config.production is None:

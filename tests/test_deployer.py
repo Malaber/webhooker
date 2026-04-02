@@ -168,6 +168,118 @@ def test_production_first_deploy_seeds_without_backup(
     assert commands[1] == ["echo", "demo-production"]
 
 
+def test_deployment_fingerprint_changes_when_compose_env_file_changes(
+    review_project_config,
+    tmp_path: Path,
+) -> None:
+    compose_path = tmp_path / "compose.yml"
+    env_path = tmp_path / "review.env"
+    env_path.write_text("SECRET_KEY=first\n", encoding="utf-8")
+    compose_path.write_text(
+        """
+services:
+  app:
+    env_file:
+      - ./review.env
+""".strip(),
+        encoding="utf-8",
+    )
+    config = review_project_config.model_copy(deep=True)
+    config.deployment.compose_file = str(compose_path)
+    config.deployment.working_directory = str(tmp_path)
+    deployer = Deployer(config)
+
+    first = deployer.deployment_fingerprint()
+    env_path.write_text("SECRET_KEY=second\n", encoding="utf-8")
+    second = deployer.deployment_fingerprint()
+
+    assert first != second
+
+
+def test_deployment_fingerprint_supports_relative_missing_and_long_syntax_env_files(
+    review_project_config,
+    tmp_path: Path,
+) -> None:
+    compose_path = tmp_path / "compose.yml"
+    nested_env = tmp_path / "nested.env"
+    nested_env.write_text("TOKEN=demo\n", encoding="utf-8")
+    compose_path.write_text(
+        """
+services:
+  app:
+    env_file:
+      - ./missing.env
+      - path: ./nested.env
+  ignored: hello
+""".strip(),
+        encoding="utf-8",
+    )
+    config = review_project_config.model_copy(deep=True)
+    config.deployment.compose_file = "compose.yml"
+    config.deployment.working_directory = str(tmp_path)
+    deployer = Deployer(config)
+
+    fingerprint = deployer.deployment_fingerprint()
+    input_paths = deployer._deployment_input_paths()
+
+    assert fingerprint
+    assert input_paths == [
+        compose_path,
+        tmp_path / "missing.env",
+        nested_env,
+    ]
+
+
+def test_compose_env_file_paths_ignore_non_mapping_documents(
+    review_project_config, tmp_path: Path
+) -> None:
+    compose_path = tmp_path / "compose.yml"
+    compose_path.write_text("- just\n- a\n- list\n", encoding="utf-8")
+    config = review_project_config.model_copy(deep=True)
+    config.deployment.compose_file = str(compose_path)
+    deployer = Deployer(config)
+
+    assert deployer._compose_env_file_paths(compose_path) == []
+
+
+def test_compose_env_file_paths_ignore_missing_or_non_mapping_services(
+    review_project_config,
+    tmp_path: Path,
+) -> None:
+    no_services_compose = tmp_path / "no-services.yml"
+    no_services_compose.write_text("services: hello\n", encoding="utf-8")
+    config = review_project_config.model_copy(deep=True)
+    config.deployment.compose_file = str(no_services_compose)
+    deployer = Deployer(config)
+    assert deployer._compose_env_file_paths(no_services_compose) == []
+
+    service_list_compose = tmp_path / "service-list.yml"
+    service_list_compose.write_text(
+        """
+services:
+  app:
+    env_file: ./review.env
+  ignored:
+    - not
+    - a
+    - mapping
+""".strip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "review.env").write_text("VALUE=1\n", encoding="utf-8")
+    config.deployment.compose_file = str(service_list_compose)
+
+    assert deployer._compose_env_file_paths(service_list_compose) == [tmp_path / "review.env"]
+
+
+def test_normalize_env_file_entries_returns_empty_for_unsupported_values(
+    review_project_config,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    assert deployer._normalize_env_file_entries(123) == []
+
+
 def test_review_helper_guards_raise_when_preview_fields_are_missing(
     review_project_config,
 ) -> None:

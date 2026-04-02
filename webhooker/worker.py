@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from webhooker.deployer import Deployer
 from webhooker.github_client import GitHubClient
-from webhooker.models import ProjectConfig, ProjectState
+from webhooker.models import DeployedProduction, DeployedReview, ProjectConfig, ProjectState
 from webhooker.state import load_state, save_state
 from webhooker.wake import clear_wake_file
 
@@ -40,6 +40,7 @@ def _reconcile_review_project(
     github_client: GitHubClient,
     deployer: Deployer,
 ) -> None:
+    desired_fingerprint = deployer.deployment_fingerprint()
     open_prs = github_client.list_open_pull_requests()
     open_by_number = {pr.number: pr for pr in open_prs}
 
@@ -62,16 +63,22 @@ def _reconcile_review_project(
             logger.info(
                 "Creating review deployment project_id=%s pr=%s", config.project_id, pr_number
             )
-            state.reviews[pr_number] = deployer.deploy_review(pr)
+            state.reviews[pr_number] = _review_with_fingerprint(
+                deployer.deploy_review(pr), desired_fingerprint
+            )
             continue
 
-        if config.reconcile.redeploy_on_sha_change and current.sha != pr.head_sha:
+        if (
+            config.reconcile.redeploy_on_sha_change and current.sha != pr.head_sha
+        ) or current.config_fingerprint != desired_fingerprint:
             logger.info(
                 "Updating review deployment project_id=%s pr=%s",
                 config.project_id,
                 pr_number,
             )
-            state.reviews[pr_number] = deployer.deploy_review(pr)
+            state.reviews[pr_number] = _review_with_fingerprint(
+                deployer.deploy_review(pr), desired_fingerprint
+            )
 
 
 def _reconcile_production_project(
@@ -80,6 +87,7 @@ def _reconcile_production_project(
     github_client: GitHubClient,
     deployer: Deployer,
 ) -> None:
+    desired_fingerprint = deployer.deployment_fingerprint()
     production_config = config.production
     if production_config is None:
         raise RuntimeError("production configuration is required for production deployments")
@@ -89,9 +97,25 @@ def _reconcile_production_project(
 
     if current is None:
         logger.info("Creating production deployment project_id=%s", config.project_id)
-        state.production = deployer.deploy_production(desired_sha, previous=None)
+        state.production = _production_with_fingerprint(
+            deployer.deploy_production(desired_sha, previous=None), desired_fingerprint
+        )
         return
 
-    if config.reconcile.redeploy_on_sha_change and current.sha != desired_sha:
+    if (
+        config.reconcile.redeploy_on_sha_change and current.sha != desired_sha
+    ) or current.config_fingerprint != desired_fingerprint:
         logger.info("Updating production deployment project_id=%s", config.project_id)
-        state.production = deployer.deploy_production(desired_sha, previous=current)
+        state.production = _production_with_fingerprint(
+            deployer.deploy_production(desired_sha, previous=current), desired_fingerprint
+        )
+
+
+def _review_with_fingerprint(review: DeployedReview, fingerprint: str) -> DeployedReview:
+    return review.model_copy(update={"config_fingerprint": fingerprint})
+
+
+def _production_with_fingerprint(
+    production: DeployedProduction, fingerprint: str
+) -> DeployedProduction:
+    return production.model_copy(update={"config_fingerprint": fingerprint})
