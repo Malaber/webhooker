@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from webhooker.models import (
@@ -186,7 +188,7 @@ def test_stale_review_cleanup_is_saved_even_when_later_deploy_fails(review_proje
         )
 
     persisted = ProjectState.model_validate_json(
-        review_project_config.state.state_file.read_text(encoding="utf-8")
+        Path(review_project_config.state.state_file).read_text(encoding="utf-8")
     )
 
     assert deployer.review_removed == [7]
