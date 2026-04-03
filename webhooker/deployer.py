@@ -825,7 +825,10 @@ class Deployer:
         timestamp = datetime.now(UTC).strftime(BACKUP_TIMESTAMP_FORMAT)
         backup_path = backup_dir / f"{sqlite_path.stem}-{timestamp}{sqlite_path.suffix}"
         shutil.copy2(sqlite_path, backup_path)
-        backups = sorted(backup_dir.glob(f"{sqlite_path.stem}-*{sqlite_path.suffix}"), reverse=True)
+        backups = sorted(
+            backup_dir.glob(f"{sqlite_path.stem}-*{sqlite_path.suffix}"),
+            reverse=True,
+        )
 
         if production.backup_keep is not None:
             for stale_backup in backups[production.backup_keep :]:
@@ -834,7 +837,9 @@ class Deployer:
         if production.backup_max_age_days is None:
             return
 
-        cutoff = datetime.now(UTC).timestamp() - (production.backup_max_age_days * 24 * 60 * 60)
+        cutoff = datetime.now(UTC).timestamp() - (
+            production.backup_max_age_days * 24 * 60 * 60
+        )
         for candidate in backups:
             timestamp_text = candidate.stem.removeprefix(f"{sqlite_path.stem}-")
             try:
@@ -842,7 +847,10 @@ class Deployer:
                     tzinfo=UTC
                 )
             except ValueError:
-                logger.warning("Skipping backup retention check for unrecognized backup name=%s", candidate)
+                logger.warning(
+                    "Skipping backup retention check for unrecognized backup name=%s",
+                    candidate,
+                )
                 continue
             if created_at.timestamp() < cutoff:
                 candidate.unlink()
