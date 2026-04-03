@@ -106,9 +106,9 @@ def _reconcile_production_project(
         return
 
     if (
-        config.reconcile.redeploy_on_sha_change and current.sha != desired_sha
-    ) or current.config_fingerprint != desired_fingerprint or not deployer.production_runtime_exists(
-        current
+        (config.reconcile.redeploy_on_sha_change and current.sha != desired_sha)
+        or current.config_fingerprint != desired_fingerprint
+        or not deployer.production_runtime_exists(current)
     ):
         logger.info("Updating production deployment project_id=%s", config.project_id)
         state.production = _production_with_fingerprint(

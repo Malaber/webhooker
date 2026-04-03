@@ -165,7 +165,7 @@ def test_compose_project_exists_returns_true_when_all_containers_are_running_and
     def fake_run_capture(argv: list[str], env: dict[str, str] | None = None) -> str:
         del env
         assert argv[-4:] == ["ps", "--all", "--format", "json"]
-        return '\n'.join(
+        return "\n".join(
             [
                 '{"Name":"demo-pr-5-app-1","State":"running","Health":"healthy"}',
                 '{"Name":"demo-pr-5-sidecar-1","State":"running","Health":""}',
