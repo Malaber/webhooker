@@ -392,7 +392,8 @@ class Deployer:
         pr_url = self._github_pull_request_url(pr.number)
         commit_url = self._github_commit_url(pr.head_sha)
         current_revision = pr.head_sha
-        return textwrap.dedent(f"""\
+        return textwrap.dedent(
+            f"""\
             <!doctype html>
             <html lang="en">
             <head>
@@ -533,7 +534,8 @@ class Deployer:
               </script>
             </body>
             </html>
-            """)
+            """
+        )
 
     def _placeholder_compose_yaml(
         self,
@@ -567,7 +569,8 @@ class Deployer:
         return yaml.safe_dump(compose_doc, sort_keys=False)
 
     def _placeholder_server_script(self, revision: str) -> str:
-        return textwrap.dedent(f"""\
+        return textwrap.dedent(
+            f"""\
             from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
             from pathlib import Path
 
@@ -598,7 +601,8 @@ class Deployer:
 
 
             ThreadingHTTPServer(("0.0.0.0", 8000), PlaceholderHandler).serve_forever()
-            """)
+            """
+        )
 
     def _review_compose_file_for_state(self, deployed: DeployedReview) -> str:
         if deployed.placeholder_active:
@@ -837,9 +841,7 @@ class Deployer:
         if production.backup_max_age_days is None:
             return
 
-        cutoff = datetime.now(UTC).timestamp() - (
-            production.backup_max_age_days * 24 * 60 * 60
-        )
+        cutoff = datetime.now(UTC).timestamp() - (production.backup_max_age_days * 24 * 60 * 60)
         for candidate in backups:
             timestamp_text = candidate.stem.removeprefix(f"{sqlite_path.stem}-")
             try:
