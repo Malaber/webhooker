@@ -139,7 +139,13 @@ class Deployer:
             raise RuntimeError("production configuration is required for production deployments")
         return self.config.production
 
-    def _run(self, argv: list[str], env: dict[str, str] | None = None) -> None:
+    def _run(
+        self,
+        argv: list[str],
+        env: dict[str, str] | None = None,
+        *,
+        capture_output: bool = False,
+    ) -> None:
         merged_env = os.environ.copy()
         if env:
             merged_env.update(env)
@@ -149,6 +155,8 @@ class Deployer:
             cwd=self.config.deployment.working_directory,
             env=merged_env,
             check=True,
+            capture_output=capture_output,
+            text=capture_output,
         )
 
     def _ensure_dir(self, path: Path, purpose: str) -> None:
@@ -249,7 +257,10 @@ class Deployer:
 
     def _pull_image(self, image: str) -> None:
         logger.info("Pulling review image=%s", image)
-        self._run([self.config.deployment.compose_bin, "pull", image])
+        self._run(
+            [self.config.deployment.compose_bin, "pull", image],
+            capture_output=True,
+        )
 
     def _is_missing_review_image(self, exc: subprocess.CalledProcessError) -> bool:
         output = "\n".join(

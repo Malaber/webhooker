@@ -21,9 +21,12 @@ def test_review_deploy_seeds_only_on_first_creation(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         assert check is True
         assert cwd == review_project_config.deployment.working_directory
+        assert kwargs.get("capture_output") is (argv[:2] == ["docker", "pull"])
+        assert kwargs.get("text") is kwargs.get("capture_output")
         commands.append((argv, env))
         return subprocess.CompletedProcess(argv, 0)
 
@@ -81,8 +84,11 @@ networks:
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         assert check is True
+        assert kwargs.get("capture_output") is (argv[:2] == ["docker", "pull"])
+        assert kwargs.get("text") is kwargs.get("capture_output")
         commands.append((argv, env))
         if argv[:2] == ["docker", "pull"]:
             raise subprocess.CalledProcessError(
@@ -134,10 +140,15 @@ def test_review_deploy_reraises_pull_errors_that_are_not_missing_images(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, env, check
         if argv[:2] == ["docker", "pull"]:
+            assert kwargs.get("capture_output") is True
+            assert kwargs.get("text") is True
             raise subprocess.CalledProcessError(1, argv, stderr="tls handshake timeout")
+        assert kwargs.get("capture_output") is False
+        assert kwargs.get("text") is False
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -160,8 +171,11 @@ def test_review_deploy_seeds_when_replacing_placeholder_without_existing_sqlite(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, env, check
+        assert kwargs.get("capture_output") is (argv[:2] == ["docker", "pull"])
+        assert kwargs.get("text") is kwargs.get("capture_output")
         commands.append(argv)
         return subprocess.CompletedProcess(argv, 0)
 
@@ -205,7 +219,10 @@ def test_remove_review_runs_compose_down_and_deletes_data_dir(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("capture_output") is False
+        assert kwargs.get("text") is False
         recorded.append((argv, env))
         return subprocess.CompletedProcess(argv, 0)
 
@@ -251,8 +268,11 @@ def test_remove_review_uses_placeholder_compose_file_when_placeholder_is_active(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, env, check
+        assert kwargs.get("capture_output") is False
+        assert kwargs.get("text") is False
         recorded.append(argv)
         return subprocess.CompletedProcess(argv, 0)
 
@@ -398,7 +418,10 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("capture_output") is False
+        assert kwargs.get("text") is False
         commands.append((argv, env))
         return subprocess.CompletedProcess(argv, 0)
 
@@ -442,9 +465,12 @@ def test_production_first_deploy_seeds_without_backup(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         assert check is True
         assert cwd == production_project_config.deployment.working_directory
+        assert kwargs.get("capture_output") is False
+        assert kwargs.get("text") is False
         commands.append(argv)
         return subprocess.CompletedProcess(argv, 0)
 
@@ -628,6 +654,7 @@ def test_seed_returns_immediately_when_command_is_empty(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         nonlocal called
         called = True
@@ -686,7 +713,10 @@ def test_production_backup_permission_error_explains_host_directory_requirement(
         cwd: str,
         env: dict[str, str],
         check: bool,
+        **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("capture_output") is False
+        assert kwargs.get("text") is False
         commands.append(argv)
         return subprocess.CompletedProcess(argv, 0)
 
