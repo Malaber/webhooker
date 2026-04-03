@@ -82,6 +82,7 @@ def production_project_config(tmp_path: Path) -> ProjectConfig:
                 "sqlite_path": str(tmp_path / "production" / "app.db"),
                 "backup_dir": str(tmp_path / "production" / "backups"),
                 "backup_keep": 3,
+                "backup_max_age_days": None,
                 "seed_command": [],
             },
             "reconcile": {

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from webhooker.deployer import Deployer
+from webhooker.deployer import Deployer, ProductionImageUnavailableError
 from webhooker.models import DeployedProduction, DeployedReview, PullRequestInfo
 
 
@@ -720,10 +721,9 @@ def test_app_display_name_falls_back_to_project_id_when_repository_is_empty(
     assert deployer._app_display_name() == review_project_config.project_id
 
 
-def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
+def test_production_deploy_pulls_before_cutover_and_keeps_three_versions(
     production_project_config,
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
 ) -> None:
     deployer = Deployer(production_project_config)
     production = production_project_config.production
@@ -746,8 +746,8 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
         check: bool,
         **kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
-        assert kwargs.get("capture_output") is False
-        assert kwargs.get("text") is False
+        assert kwargs.get("capture_output") is (argv[:2] == ["docker", "pull"])
+        assert kwargs.get("text") is kwargs.get("capture_output")
         commands.append((argv, env))
         return subprocess.CompletedProcess(argv, 0)
 
@@ -768,9 +768,10 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
 
     backups = sorted(backup_dir.glob("app-*.db"))
 
-    assert commands[0][0][-2:] == ["down", "--remove-orphans"]
-    assert commands[0][1]["APP_IMAGE"] == "ghcr.io/example/repo:sha-oldsha1"
-    assert commands[1][0][-3:] == ["up", "-d", "--remove-orphans"]
+    assert commands[0][0] == ["docker", "pull", "ghcr.io/example/repo:sha-abcdef1"]
+    assert commands[1][0][-2:] == ["down", "--remove-orphans"]
+    assert commands[1][1]["APP_IMAGE"] == "ghcr.io/example/repo:sha-oldsha1"
+    assert commands[2][0][-3:] == ["up", "-d", "--remove-orphans"]
     assert deployed.image == "ghcr.io/example/repo:sha-abcdef1"
     assert len(backups) == 3
 
@@ -795,8 +796,8 @@ def test_production_first_deploy_seeds_without_backup(
     ) -> subprocess.CompletedProcess[str]:
         assert check is True
         assert cwd == production_project_config.deployment.working_directory
-        assert kwargs.get("capture_output") is False
-        assert kwargs.get("text") is False
+        assert kwargs.get("capture_output") is (argv[:2] == ["docker", "pull"])
+        assert kwargs.get("text") is kwargs.get("capture_output")
         commands.append(argv)
         return subprocess.CompletedProcess(argv, 0)
 
@@ -805,8 +806,55 @@ def test_production_first_deploy_seeds_without_backup(
     deployed = deployer.deploy_production("abcdef123456", previous=None)
 
     assert deployed.compose_project == "demo-production"
-    assert commands[0][-3:] == ["up", "-d", "--remove-orphans"]
-    assert commands[1] == ["echo", "demo-production"]
+    assert commands[0] == ["docker", "pull", "ghcr.io/example/repo:sha-abcdef1"]
+    assert commands[1][-3:] == ["up", "-d", "--remove-orphans"]
+    assert commands[2] == ["echo", "demo-production"]
+
+
+def test_production_deploy_keeps_current_release_running_when_image_is_missing(
+    production_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(production_project_config)
+    production = production_project_config.production
+    assert production is not None
+
+    commands: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env, check, kwargs
+        commands.append(argv)
+        if argv[:2] == ["docker", "pull"]:
+            raise subprocess.CalledProcessError(
+                1,
+                argv,
+                stderr="manifest unknown: manifest unknown",
+            )
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ProductionImageUnavailableError):
+        deployer.deploy_production(
+            "abcdef123456",
+            previous=DeployedProduction(
+                sha="oldsha1",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir=production.data_dir,
+                sqlite_path=production.sqlite_path,
+                image="ghcr.io/example/repo:sha-oldsha1",
+                branch="main",
+            ),
+        )
+
+    assert commands == [["docker", "pull", "ghcr.io/example/repo:sha-abcdef1"]]
 
 
 def test_deployment_fingerprint_changes_when_compose_env_file_changes(
@@ -1003,6 +1051,43 @@ def test_backup_sqlite_returns_when_database_is_missing(
     deployer._backup_sqlite(missing_sqlite)
 
     assert not missing_sqlite.exists()
+
+
+def test_backup_sqlite_prunes_backups_older_than_configured_age(
+    production_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(production_project_config)
+    production = production_project_config.production
+    assert production is not None
+    production.backup_keep = None
+    production.backup_max_age_days = 30
+
+    class FrozenDateTime:
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 4, 3, 12, 0, 0, tzinfo=tz or UTC)
+
+        @classmethod
+        def strptime(cls, value: str, fmt: str) -> datetime:
+            return datetime.strptime(value, fmt)
+
+    monkeypatch.setattr("webhooker.deployer.datetime", FrozenDateTime)
+
+    sqlite_path = Path(production.sqlite_path)
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    sqlite_path.write_text("db", encoding="utf-8")
+    backup_dir = Path(production.backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    (backup_dir / "app-20240201000000.db").write_text("old", encoding="utf-8")
+    (backup_dir / "app-20240315000000.db").write_text("fresh", encoding="utf-8")
+
+    deployer._backup_sqlite(sqlite_path)
+
+    backups = sorted(path.name for path in backup_dir.glob("app-*.db"))
+    assert "app-20240201000000.db" not in backups
+    assert "app-20240315000000.db" in backups
 
 
 def test_review_deploy_permission_error_explains_host_directory_requirement(
