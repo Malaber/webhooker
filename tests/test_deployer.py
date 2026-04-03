@@ -125,9 +125,12 @@ networks:
     assert placeholder_compose.exists()
     assert placeholder_html.exists()
     assert placeholder_server.exists()
-    assert "webhooker is still loading your deployment for repo" in placeholder_html.read_text(
-        encoding="utf-8"
-    )
+    placeholder_markup = placeholder_html.read_text(encoding="utf-8")
+    assert "webhooker is still loading your deployment for repo" in placeholder_markup
+    assert 'href="https://github.com/example/repo/pull/9"' in placeholder_markup
+    assert 'href="https://github.com/example/repo/commit/abcdef123456"' in placeholder_markup
+    assert 'target="_blank"' in placeholder_markup
+    assert 'rel="noreferrer"' in placeholder_markup
     assert "python:3.14-alpine" in placeholder_compose.read_text(encoding="utf-8")
     assert "command:\n    - python\n    - /placeholder/server.py" in placeholder_compose.read_text(
         encoding="utf-8"

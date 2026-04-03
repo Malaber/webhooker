@@ -298,6 +298,14 @@ class Deployer:
             return parts[-1]
         return self.config.project_id
 
+    def _github_pull_request_url(self, pr_number: int) -> str:
+        return f"https://github.com/{self.config.github.owner}/{self.config.github.repo}/pull/{pr_number}"
+
+    def _github_commit_url(self, sha: str) -> str:
+        return (
+            f"https://github.com/{self.config.github.owner}/{self.config.github.repo}/commit/{sha}"
+        )
+
     def _placeholder_root(self) -> Path:
         preview = self._preview_config()
         return Path(preview.base_dir) / ".webhooker-placeholder"
@@ -374,6 +382,8 @@ class Deployer:
 
     def _placeholder_html(self, pr: PullRequestInfo, hostname: str) -> str:
         app_name = self._app_display_name()
+        pr_url = self._github_pull_request_url(pr.number)
+        commit_url = self._github_commit_url(pr.head_sha)
         return textwrap.dedent(f"""\
             <!doctype html>
             <html lang="en">
@@ -424,10 +434,28 @@ class Deployer:
                   color: #475569;
                   font-size: 0.95rem;
                 }}
+                .links {{
+                  display: flex;
+                  gap: 12px;
+                  flex-wrap: wrap;
+                  margin-top: 12px;
+                }}
                 .pill {{
                   background: #e0f2fe;
                   border-radius: 999px;
                   padding: 8px 12px;
+                }}
+                .link-pill {{
+                  background: #0f172a;
+                  color: #f8fafc;
+                  text-decoration: none;
+                  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+                }}
+                .link-pill:hover,
+                .link-pill:focus-visible {{
+                  background: #1e293b;
+                  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+                  transform: translateY(-1px);
                 }}
                 .pulse {{
                   width: 14px;
@@ -455,6 +483,10 @@ class Deployer:
                   <span class="pill">PR #{pr.number}</span>
                   <span class="pill">{hostname}</span>
                   <span class="pill">Commit {pr.head_sha[:7]}</span>
+                </div>
+                <div class="links">
+                  <a class="pill link-pill" href="{pr_url}" target="_blank" rel="noreferrer">Open pull request</a>
+                  <a class="pill link-pill" href="{commit_url}" target="_blank" rel="noreferrer">Open commit</a>
                 </div>
               </main>
               <script>
