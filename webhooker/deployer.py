@@ -368,7 +368,7 @@ class Deployer:
         server_path = self._placeholder_server_path(pr.number)
         compose_path = self._placeholder_compose_path(pr.number)
         html_path.write_text(self._placeholder_html(pr, hostname), encoding="utf-8")
-        server_path.write_text(self._placeholder_server_script(), encoding="utf-8")
+        server_path.write_text(self._placeholder_server_script(pr.head_sha), encoding="utf-8")
         compose_path.write_text(
             self._placeholder_compose_yaml(
                 service_template,
@@ -384,6 +384,7 @@ class Deployer:
         app_name = self._app_display_name()
         pr_url = self._github_pull_request_url(pr.number)
         commit_url = self._github_commit_url(pr.head_sha)
+        current_revision = pr.head_sha
         return textwrap.dedent(f"""\
             <!doctype html>
             <html lang="en">
@@ -490,6 +491,8 @@ class Deployer:
                 </div>
               </main>
               <script>
+                const currentPlaceholderRevision = "{current_revision}";
+
                 async function checkForRealApp() {{
                   try {{
                     const response = await window.fetch(window.location.href, {{
@@ -501,6 +504,15 @@ class Deployer:
                       }},
                     }});
                     if (response.ok && response.headers.get("x-webhooker-placeholder") !== "1") {{
+                      window.location.reload();
+                      return;
+                    }}
+                    if (
+                      response.ok &&
+                      response.headers.get("x-webhooker-placeholder") === "1" &&
+                      response.headers.get("x-webhooker-placeholder-revision") !==
+                        currentPlaceholderRevision
+                    ) {{
                       window.location.reload();
                       return;
                     }}
@@ -547,12 +559,13 @@ class Deployer:
 
         return yaml.safe_dump(compose_doc, sort_keys=False)
 
-    def _placeholder_server_script(self) -> str:
-        return textwrap.dedent("""\
+    def _placeholder_server_script(self, revision: str) -> str:
+        return textwrap.dedent(f"""\
             from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
             from pathlib import Path
 
             HTML = Path("/placeholder/index.html").read_bytes()
+            REVISION = "{revision}"
 
 
             class PlaceholderHandler(BaseHTTPRequestHandler):
@@ -568,6 +581,7 @@ class Deployer:
                     self.send_header("Content-Length", str(len(HTML)))
                     self.send_header("Cache-Control", "no-store, max-age=0")
                     self.send_header("X-Webhooker-Placeholder", "1")
+                    self.send_header("X-Webhooker-Placeholder-Revision", REVISION)
                     self.end_headers()
                     if body:
                         self.wfile.write(HTML)
