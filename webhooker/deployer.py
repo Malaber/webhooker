@@ -159,6 +159,21 @@ class Deployer:
             text=capture_output,
         )
 
+    def _run_capture(self, argv: list[str], env: dict[str, str] | None = None) -> str:
+        merged_env = os.environ.copy()
+        if env:
+            merged_env.update(env)
+
+        completed = subprocess.run(
+            argv,
+            cwd=self.config.deployment.working_directory,
+            env=merged_env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return completed.stdout
+
     def _ensure_dir(self, path: Path, purpose: str) -> None:
         try:
             ensure_dir(path)
@@ -480,6 +495,22 @@ class Deployer:
             return str(self._placeholder_compose_path(deployed.pr))
         return self.config.deployment.compose_file
 
+    def review_runtime_exists(self, deployed: DeployedReview) -> bool:
+        if not Path(deployed.data_dir).exists():
+            return False
+        return self._compose_project_exists(
+            deployed.compose_project,
+            compose_file=self._review_compose_file_for_state(deployed),
+            extra_env=self._compose_env(
+                image=deployed.image,
+                hostname=deployed.hostname,
+                data_dir=deployed.data_dir,
+                sqlite_path=deployed.sqlite_path,
+                traefik_router=deployed.compose_project,
+                traefik_service=deployed.compose_project,
+            ),
+        )
+
     def deploy_review(
         self,
         pr: PullRequestInfo,
@@ -553,6 +584,71 @@ class Deployer:
         finally:
             shutil.rmtree(deployed.data_dir, ignore_errors=True)
             shutil.rmtree(self._placeholder_compose_path(deployed.pr).parent, ignore_errors=True)
+
+    def production_runtime_exists(self, deployed: DeployedProduction) -> bool:
+        if not Path(deployed.data_dir).exists():
+            return False
+        sqlite_parent = Path(deployed.sqlite_path).parent
+        if not sqlite_parent.exists():
+            return False
+        return self._compose_project_exists(
+            deployed.compose_project,
+            compose_file=self.config.deployment.compose_file,
+            extra_env=self._compose_env(
+                image=deployed.image,
+                hostname=deployed.hostname,
+                data_dir=deployed.data_dir,
+                sqlite_path=deployed.sqlite_path,
+                traefik_router=deployed.compose_project,
+                traefik_service=deployed.compose_project,
+            ),
+        )
+
+    def _compose_project_exists(
+        self,
+        compose_project: str,
+        *,
+        compose_file: str,
+        extra_env: dict[str, str],
+    ) -> bool:
+        try:
+            output = self._run_capture(
+                [
+                    self.config.deployment.compose_bin,
+                    "compose",
+                    "-p",
+                    compose_project,
+                    "-f",
+                    compose_file,
+                    "ps",
+                    "--all",
+                    "--format",
+                    "json",
+                ],
+                env=extra_env,
+            )
+        except subprocess.CalledProcessError:
+            return False
+
+        lines = [line for line in output.splitlines() if line.strip()]
+        if not lines:
+            return False
+
+        return all(self._compose_container_matches_requested_state(line) for line in lines)
+
+    def _compose_container_matches_requested_state(self, raw_line: str) -> bool:
+        payload = json.loads(raw_line)
+        if not isinstance(payload, dict):
+            return False
+
+        state = str(payload.get("State", "")).strip().lower()
+        if state != "running":
+            return False
+
+        health = str(payload.get("Health", "")).strip().lower()
+        if health in {"", "healthy"}:
+            return True
+        return False
 
     def deploy_production(
         self, sha: str, previous: DeployedProduction | None

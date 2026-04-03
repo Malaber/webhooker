@@ -72,6 +72,7 @@ def _reconcile_review_project(
             (config.reconcile.redeploy_on_sha_change and current.sha != pr.head_sha)
             or current.config_fingerprint != desired_fingerprint
             or current.placeholder_active
+            or not deployer.review_runtime_exists(current)
         ):
             logger.info(
                 "Updating review deployment project_id=%s pr=%s",
@@ -106,7 +107,9 @@ def _reconcile_production_project(
 
     if (
         config.reconcile.redeploy_on_sha_change and current.sha != desired_sha
-    ) or current.config_fingerprint != desired_fingerprint:
+    ) or current.config_fingerprint != desired_fingerprint or not deployer.production_runtime_exists(
+        current
+    ):
         logger.info("Updating production deployment project_id=%s", config.project_id)
         state.production = _production_with_fingerprint(
             deployer.deploy_production(desired_sha, previous=current), desired_fingerprint

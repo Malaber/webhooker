@@ -129,6 +129,309 @@ networks:
     assert "python:3.14-alpine" in placeholder_compose.read_text(encoding="utf-8")
 
 
+def test_run_capture_uses_working_directory_and_returns_stdout(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    def fake_run(
+        argv: list[str],
+        cwd: str,
+        env: dict[str, str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert argv == ["docker", "compose", "ps"]
+        assert cwd == review_project_config.deployment.working_directory
+        assert env["EXTRA_FLAG"] == "1"
+        assert check is True
+        assert capture_output is True
+        assert text is True
+        return subprocess.CompletedProcess(argv, 0, stdout="ok\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert deployer._run_capture(["docker", "compose", "ps"], env={"EXTRA_FLAG": "1"}) == "ok\n"
+
+
+def test_compose_project_exists_returns_true_when_all_containers_are_running_and_healthy(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    def fake_run_capture(argv: list[str], env: dict[str, str] | None = None) -> str:
+        del env
+        assert argv[-4:] == ["ps", "--all", "--format", "json"]
+        return '\n'.join(
+            [
+                '{"Name":"demo-pr-5-app-1","State":"running","Health":"healthy"}',
+                '{"Name":"demo-pr-5-sidecar-1","State":"running","Health":""}',
+            ]
+        )
+
+    monkeypatch.setattr(deployer, "_run_capture", fake_run_capture)
+
+    assert (
+        deployer._compose_project_exists(
+            "demo-pr-5",
+            compose_file="/tmp/compose.yml",
+            extra_env={"APP_IMAGE": "demo"},
+        )
+        is True
+    )
+
+
+def test_compose_project_exists_returns_false_when_ps_fails(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    def fake_run_capture(argv: list[str], env: dict[str, str] | None = None) -> str:
+        del env
+        raise subprocess.CalledProcessError(1, argv)
+
+    monkeypatch.setattr(deployer, "_run_capture", fake_run_capture)
+
+    assert (
+        deployer._compose_project_exists(
+            "demo-pr-5",
+            compose_file="/tmp/compose.yml",
+            extra_env={"APP_IMAGE": "demo"},
+        )
+        is False
+    )
+
+
+def test_compose_project_exists_returns_false_when_ps_is_empty(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+    monkeypatch.setattr(deployer, "_run_capture", lambda argv, env=None: "\n \n")
+
+    assert (
+        deployer._compose_project_exists(
+            "demo-pr-5",
+            compose_file="/tmp/compose.yml",
+            extra_env={"APP_IMAGE": "demo"},
+        )
+        is False
+    )
+
+
+def test_compose_project_exists_returns_false_when_container_is_not_running(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+    monkeypatch.setattr(
+        deployer,
+        "_run_capture",
+        lambda argv, env=None: '{"Name":"demo-pr-5-app-1","State":"restarting","Health":""}\n',
+    )
+
+    assert (
+        deployer._compose_project_exists(
+            "demo-pr-5",
+            compose_file="/tmp/compose.yml",
+            extra_env={"APP_IMAGE": "demo"},
+        )
+        is False
+    )
+
+
+def test_compose_project_exists_returns_false_when_container_is_unhealthy(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+    monkeypatch.setattr(
+        deployer,
+        "_run_capture",
+        lambda argv, env=None: '{"Name":"demo-pr-5-app-1","State":"running","Health":"unhealthy"}\n',
+    )
+
+    assert (
+        deployer._compose_project_exists(
+            "demo-pr-5",
+            compose_file="/tmp/compose.yml",
+            extra_env={"APP_IMAGE": "demo"},
+        )
+        is False
+    )
+
+
+def test_compose_project_exists_returns_false_for_non_object_json_lines(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deployer = Deployer(review_project_config)
+    monkeypatch.setattr(deployer, "_run_capture", lambda argv, env=None: '"oops"\n')
+
+    assert (
+        deployer._compose_project_exists(
+            "demo-pr-5",
+            compose_file="/tmp/compose.yml",
+            extra_env={"APP_IMAGE": "demo"},
+        )
+        is False
+    )
+
+
+def test_review_runtime_exists_returns_false_when_data_dir_is_missing(
+    review_project_config,
+) -> None:
+    deployer = Deployer(review_project_config)
+
+    assert (
+        deployer.review_runtime_exists(
+            DeployedReview(
+                pr=7,
+                sha="abcdef0",
+                compose_project="demo-pr-7",
+                hostname="pr-7.review.example.test",
+                data_dir="/tmp/does-not-exist-pr-7",
+                sqlite_path="/tmp/does-not-exist-pr-7/app.db",
+                image="ghcr.io/example/repo:pr-7-abcdef0",
+            )
+        )
+        is False
+    )
+
+
+def test_review_runtime_exists_checks_compose_project_when_data_dir_exists(
+    review_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    deployer = Deployer(review_project_config)
+    data_dir = tmp_path / "pr-7"
+    data_dir.mkdir()
+    recorded: dict[str, object] = {}
+
+    def fake_compose_project_exists(
+        compose_project: str,
+        *,
+        compose_file: str,
+        extra_env: dict[str, str],
+    ) -> bool:
+        recorded["compose_project"] = compose_project
+        recorded["compose_file"] = compose_file
+        recorded["extra_env"] = extra_env
+        return True
+
+    monkeypatch.setattr(deployer, "_compose_project_exists", fake_compose_project_exists)
+
+    assert (
+        deployer.review_runtime_exists(
+            DeployedReview(
+                pr=7,
+                sha="abcdef0",
+                compose_project="demo-pr-7",
+                hostname="pr-7.review.example.test",
+                data_dir=str(data_dir),
+                sqlite_path=str(data_dir / "app.db"),
+                image="ghcr.io/example/repo:pr-7-abcdef0",
+            )
+        )
+        is True
+    )
+    assert recorded["compose_project"] == "demo-pr-7"
+    assert recorded["compose_file"] == review_project_config.deployment.compose_file
+
+
+def test_production_runtime_exists_returns_false_when_data_dir_is_missing(
+    production_project_config,
+) -> None:
+    deployer = Deployer(production_project_config)
+
+    assert (
+        deployer.production_runtime_exists(
+            DeployedProduction(
+                sha="abcdef0",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir="/tmp/does-not-exist-production",
+                sqlite_path="/tmp/does-not-exist-production/app.db",
+                image="ghcr.io/example/repo:sha-abcdef0",
+                branch="main",
+            )
+        )
+        is False
+    )
+
+
+def test_production_runtime_exists_returns_false_when_sqlite_parent_is_missing(
+    production_project_config,
+    tmp_path: Path,
+) -> None:
+    deployer = Deployer(production_project_config)
+    data_dir = tmp_path / "production"
+    data_dir.mkdir()
+
+    assert (
+        deployer.production_runtime_exists(
+            DeployedProduction(
+                sha="abcdef0",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir=str(data_dir),
+                sqlite_path=str(tmp_path / "missing-parent" / "app.db"),
+                image="ghcr.io/example/repo:sha-abcdef0",
+                branch="main",
+            )
+        )
+        is False
+    )
+
+
+def test_production_runtime_exists_checks_compose_project_when_paths_exist(
+    production_project_config,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    deployer = Deployer(production_project_config)
+    data_dir = tmp_path / "production"
+    data_dir.mkdir()
+    sqlite_parent = data_dir / "db"
+    sqlite_parent.mkdir()
+    recorded: dict[str, object] = {}
+
+    def fake_compose_project_exists(
+        compose_project: str,
+        *,
+        compose_file: str,
+        extra_env: dict[str, str],
+    ) -> bool:
+        recorded["compose_project"] = compose_project
+        recorded["compose_file"] = compose_file
+        recorded["extra_env"] = extra_env
+        return True
+
+    monkeypatch.setattr(deployer, "_compose_project_exists", fake_compose_project_exists)
+
+    assert (
+        deployer.production_runtime_exists(
+            DeployedProduction(
+                sha="abcdef0",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir=str(data_dir),
+                sqlite_path=str(sqlite_parent / "app.db"),
+                image="ghcr.io/example/repo:sha-abcdef0",
+                branch="main",
+            )
+        )
+        is True
+    )
+    assert recorded["compose_project"] == "demo-production"
+    assert recorded["compose_file"] == production_project_config.deployment.compose_file
+
+
 def test_review_deploy_reraises_pull_errors_that_are_not_missing_images(
     review_project_config,
     monkeypatch: pytest.MonkeyPatch,
