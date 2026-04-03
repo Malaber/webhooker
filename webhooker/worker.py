@@ -64,20 +64,23 @@ def _reconcile_review_project(
                 "Creating review deployment project_id=%s pr=%s", config.project_id, pr_number
             )
             state.reviews[pr_number] = _review_with_fingerprint(
-                deployer.deploy_review(pr), desired_fingerprint
+                deployer.deploy_review(pr, previous=None), desired_fingerprint
             )
             continue
 
         if (
-            config.reconcile.redeploy_on_sha_change and current.sha != pr.head_sha
-        ) or current.config_fingerprint != desired_fingerprint:
+            (config.reconcile.redeploy_on_sha_change and current.sha != pr.head_sha)
+            or current.config_fingerprint != desired_fingerprint
+            or current.placeholder_active
+            or not deployer.review_runtime_exists(current)
+        ):
             logger.info(
                 "Updating review deployment project_id=%s pr=%s",
                 config.project_id,
                 pr_number,
             )
             state.reviews[pr_number] = _review_with_fingerprint(
-                deployer.deploy_review(pr), desired_fingerprint
+                deployer.deploy_review(pr, previous=current), desired_fingerprint
             )
 
 
@@ -103,8 +106,10 @@ def _reconcile_production_project(
         return
 
     if (
-        config.reconcile.redeploy_on_sha_change and current.sha != desired_sha
-    ) or current.config_fingerprint != desired_fingerprint:
+        (config.reconcile.redeploy_on_sha_change and current.sha != desired_sha)
+        or current.config_fingerprint != desired_fingerprint
+        or not deployer.production_runtime_exists(current)
+    ):
         logger.info("Updating production deployment project_id=%s", config.project_id)
         state.production = _production_with_fingerprint(
             deployer.deploy_production(desired_sha, previous=current), desired_fingerprint

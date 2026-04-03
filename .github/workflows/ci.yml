@@ -40,7 +40,6 @@ jobs:
 
   version:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')
-    needs: test
     uses: Malaber/github-workflows/.github/workflows/reusable-version.yml@main
     with:
       seed_version: "0.3.0"
@@ -48,7 +47,6 @@ jobs:
   prepare-release:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')
     needs:
-      - test
       - version
     runs-on: ubuntu-latest
     outputs:
@@ -94,18 +92,17 @@ jobs:
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build-docker:
-    if: (github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')) && (github.event_name != 'push' || needs.prepare-release.outputs.ready == 'true')
     needs:
-      - test
       - version
       - prepare-release
+    if: (github.event_name != 'push' || github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')) && (github.event_name != 'push' || needs.prepare-release.outputs.ready == 'true')
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'push' && needs.prepare-release.outputs.source_sha || github.sha }}
+          ref: ${{ needs.prepare-release.outputs.source_sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -133,7 +130,8 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           tags: |
-            ${{ steps.image.outputs.image }}:sha-${{ github.event_name == 'push' && needs.prepare-release.outputs.source_sha || github.sha }}
+            ${{ steps.image.outputs.image }}:sha-${{ needs.prepare-release.outputs.source_sha }}
+            ${{ needs.version.outputs.prerelease == 'true' && format('{0}:{1}', steps.image.outputs.image, needs.version.outputs.release_version) || '' }}
 
   release-ansible-collection:
     if: (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v'))

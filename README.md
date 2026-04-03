@@ -168,6 +168,7 @@ Set `deployment.mode: production` and provide:
 At reconcile time, `webhooker` executes commands like:
 
 ```bash
+docker pull <image>
 docker compose -p <project-name> -f <compose-file> up -d --remove-orphans
 docker compose -p <project-name> -f <compose-file> down --remove-orphans
 ```
@@ -396,9 +397,12 @@ For production, the template is usually almost identical. The difference is in t
 When a PR opens, synchronizes, or reopens, `webhooker` will:
 
 - compute the image tag from the PR number and head SHA
+- pull that image before switching the review deployment
 - start `docker compose` with a PR-specific project name
 - keep the PR SQLite file between image upgrades
 - run the review seed command only the first time that PR environment is created
+
+If the review image tag does not exist yet because app CI is still building it, `webhooker` temporarily serves a small loading page on the PR hostname instead of leaving Traefik with no backend. The worker keeps retrying the real image on each reconcile and swaps the placeholder out as soon as the image can be pulled.
 
 ## Production deployment example
 
