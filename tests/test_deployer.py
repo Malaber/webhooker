@@ -131,11 +131,17 @@ networks:
     assert 'href="https://github.com/example/repo/commit/abcdef123456"' in placeholder_markup
     assert 'target="_blank"' in placeholder_markup
     assert 'rel="noreferrer"' in placeholder_markup
+    assert 'response.headers.get("x-webhooker-placeholder") !== "1"' in placeholder_markup
+    assert "window.setTimeout(checkForRealApp, 5000);" in placeholder_markup
+    assert '"x-webhooker-probe": "1"' in placeholder_markup
     assert "python:3.14-alpine" in placeholder_compose.read_text(encoding="utf-8")
     assert "command:\n    - python\n    - /placeholder/server.py" in placeholder_compose.read_text(
         encoding="utf-8"
     )
     assert "ThreadingHTTPServer" in placeholder_server.read_text(encoding="utf-8")
+    assert 'self.send_header("X-Webhooker-Placeholder", "1")' in placeholder_server.read_text(
+        encoding="utf-8"
+    )
     assert "http.server" not in placeholder_compose.read_text(encoding="utf-8")
 
 

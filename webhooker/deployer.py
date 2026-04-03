@@ -478,7 +478,7 @@ class Deployer:
                 <p><span class="pulse"></span>Webhooker is preparing your review app.</p>
                 <h1>webhooker is still loading your deployment for {app_name}</h1>
                 <p>The preview image for pull request #{pr.number} is not available yet, so this temporary page is keeping the hostname live while webhooker keeps retrying the deploy in the background.</p>
-                <p>This page refreshes automatically every {PLACEHOLDER_POLL_SECONDS} seconds and will switch to the real app as soon as the image is ready.</p>
+                <p>This page checks for the real app every {PLACEHOLDER_POLL_SECONDS} seconds in the background and will switch over as soon as the image is ready.</p>
                 <div class="meta">
                   <span class="pill">PR #{pr.number}</span>
                   <span class="pill">{hostname}</span>
@@ -490,9 +490,27 @@ class Deployer:
                 </div>
               </main>
               <script>
-                window.setTimeout(function () {{
-                  window.location.reload();
-                }}, {PLACEHOLDER_POLL_SECONDS * 1000});
+                async function checkForRealApp() {{
+                  try {{
+                    const response = await window.fetch(window.location.href, {{
+                      method: "GET",
+                      cache: "no-store",
+                      credentials: "same-origin",
+                      headers: {{
+                        "x-webhooker-probe": "1",
+                      }},
+                    }});
+                    if (response.ok && response.headers.get("x-webhooker-placeholder") !== "1") {{
+                      window.location.reload();
+                      return;
+                    }}
+                  }} catch (error) {{
+                    console.debug("webhooker placeholder probe failed", error);
+                  }}
+                  window.setTimeout(checkForRealApp, {PLACEHOLDER_POLL_SECONDS * 1000});
+                }}
+
+                window.setTimeout(checkForRealApp, {PLACEHOLDER_POLL_SECONDS * 1000});
               </script>
             </body>
             </html>
@@ -549,6 +567,7 @@ class Deployer:
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(HTML)))
                     self.send_header("Cache-Control", "no-store, max-age=0")
+                    self.send_header("X-Webhooker-Placeholder", "1")
                     self.end_headers()
                     if body:
                         self.wfile.write(HTML)
