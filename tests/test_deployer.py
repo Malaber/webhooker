@@ -109,6 +109,7 @@ networks:
     )
     placeholder_compose = placeholder_dir / "compose.yml"
     placeholder_html = placeholder_dir / "index.html"
+    placeholder_server = placeholder_dir / "server.py"
 
     assert deployed.placeholder_active is True
     assert deployed.image == "ghcr.io/example/repo:pr-9-abcdef1"
@@ -123,10 +124,16 @@ networks:
     ]
     assert placeholder_compose.exists()
     assert placeholder_html.exists()
+    assert placeholder_server.exists()
     assert "webhooker is still loading your deployment for repo" in placeholder_html.read_text(
         encoding="utf-8"
     )
     assert "python:3.14-alpine" in placeholder_compose.read_text(encoding="utf-8")
+    assert "command:\n    - python\n    - /placeholder/server.py" in placeholder_compose.read_text(
+        encoding="utf-8"
+    )
+    assert "ThreadingHTTPServer" in placeholder_server.read_text(encoding="utf-8")
+    assert "http.server" not in placeholder_compose.read_text(encoding="utf-8")
 
 
 def test_run_capture_uses_working_directory_and_returns_stdout(

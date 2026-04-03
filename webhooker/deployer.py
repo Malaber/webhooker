@@ -308,6 +308,9 @@ class Deployer:
     def _placeholder_html_path(self, pr: int) -> Path:
         return self._placeholder_root() / f"pr-{pr}" / "index.html"
 
+    def _placeholder_server_path(self, pr: int) -> Path:
+        return self._placeholder_root() / f"pr-{pr}" / "server.py"
+
     def _placeholder_service_template(self) -> tuple[dict[str, object], dict[str, object]]:
         compose_path = self._compose_file_path()
         loaded = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
@@ -354,10 +357,17 @@ class Deployer:
 
         service_template, top_level_networks = self._placeholder_service_template()
         html_path = self._placeholder_html_path(pr.number)
+        server_path = self._placeholder_server_path(pr.number)
         compose_path = self._placeholder_compose_path(pr.number)
         html_path.write_text(self._placeholder_html(pr, hostname), encoding="utf-8")
+        server_path.write_text(self._placeholder_server_script(), encoding="utf-8")
         compose_path.write_text(
-            self._placeholder_compose_yaml(service_template, top_level_networks, html_path),
+            self._placeholder_compose_yaml(
+                service_template,
+                top_level_networks,
+                html_path,
+                server_path,
+            ),
             encoding="utf-8",
         )
         return compose_path
@@ -461,19 +471,16 @@ class Deployer:
         service_template: dict[str, object],
         top_level_networks: dict[str, object],
         html_path: Path,
+        server_path: Path,
     ) -> str:
         placeholder_service: dict[str, object] = {
             "image": PLACEHOLDER_IMAGE,
-            "command": [
-                "python",
-                "-m",
-                "http.server",
-                "8000",
-                "--directory",
-                "/placeholder",
-            ],
+            "command": ["python", "/placeholder/server.py"],
             "restart": "unless-stopped",
-            "volumes": [f"{html_path}:/placeholder/index.html:ro"],
+            "volumes": [
+                f"{html_path}:/placeholder/index.html:ro",
+                f"{server_path}:/placeholder/server.py:ro",
+            ],
         }
         for key in ("labels", "networks"):
             value = service_template.get(key)
@@ -489,6 +496,37 @@ class Deployer:
             compose_doc["networks"] = top_level_networks
 
         return yaml.safe_dump(compose_doc, sort_keys=False)
+
+    def _placeholder_server_script(self) -> str:
+        return textwrap.dedent("""\
+            from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+            from pathlib import Path
+
+            HTML = Path("/placeholder/index.html").read_bytes()
+
+
+            class PlaceholderHandler(BaseHTTPRequestHandler):
+                def do_GET(self) -> None:
+                    self._send_html()
+
+                def do_HEAD(self) -> None:
+                    self._send_html(body=False)
+
+                def _send_html(self, *, body: bool = True) -> None:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(HTML)))
+                    self.send_header("Cache-Control", "no-store, max-age=0")
+                    self.end_headers()
+                    if body:
+                        self.wfile.write(HTML)
+
+                def log_message(self, format: str, *args: object) -> None:
+                    return
+
+
+            ThreadingHTTPServer(("0.0.0.0", 8000), PlaceholderHandler).serve_forever()
+            """)
 
     def _review_compose_file_for_state(self, deployed: DeployedReview) -> str:
         if deployed.placeholder_active:
