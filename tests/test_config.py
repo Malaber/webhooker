@@ -12,7 +12,8 @@ from webhooker.config import env_required, load_project_config, load_project_con
 def test_valid_review_yaml_loads(tmp_path: Path) -> None:
     config_file = tmp_path / "project.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: demo
             github:
               owner: example
@@ -42,7 +43,8 @@ def test_valid_review_yaml_loads(tmp_path: Path) -> None:
               state_file: /tmp/state.json
             wake:
               wake_file: /tmp/wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 
@@ -55,7 +57,8 @@ def test_valid_review_yaml_loads(tmp_path: Path) -> None:
 def test_valid_production_yaml_loads(tmp_path: Path) -> None:
     config_file = tmp_path / "production.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: production-demo
             github:
               owner: example
@@ -90,7 +93,8 @@ def test_valid_production_yaml_loads(tmp_path: Path) -> None:
               state_file: /tmp/production-state.json
             wake:
               wake_file: /tmp/production-wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 
@@ -131,7 +135,8 @@ def test_env_required_raises_for_missing_env(monkeypatch: pytest.MonkeyPatch) ->
 def test_review_mode_requires_preview_section(tmp_path: Path) -> None:
     config_file = tmp_path / "project.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: demo
             github:
               owner: example
@@ -156,7 +161,8 @@ def test_review_mode_requires_preview_section(tmp_path: Path) -> None:
               state_file: /tmp/state.json
             wake:
               wake_file: /tmp/wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 
@@ -167,7 +173,8 @@ def test_review_mode_requires_preview_section(tmp_path: Path) -> None:
 def test_review_mode_requires_hostname_template(tmp_path: Path) -> None:
     config_file = tmp_path / "project.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: demo
             github:
               owner: example
@@ -195,7 +202,8 @@ def test_review_mode_requires_hostname_template(tmp_path: Path) -> None:
               state_file: /tmp/state.json
             wake:
               wake_file: /tmp/wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 
@@ -206,7 +214,8 @@ def test_review_mode_requires_hostname_template(tmp_path: Path) -> None:
 def test_production_mode_requires_hostname(tmp_path: Path) -> None:
     config_file = tmp_path / "production.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: production-demo
             github:
               owner: example
@@ -235,7 +244,8 @@ def test_production_mode_requires_hostname(tmp_path: Path) -> None:
               state_file: /tmp/production-state.json
             wake:
               wake_file: /tmp/production-wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 
@@ -246,7 +256,8 @@ def test_production_mode_requires_hostname(tmp_path: Path) -> None:
 def test_production_mode_requires_production_section(tmp_path: Path) -> None:
     config_file = tmp_path / "production.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: production-demo
             github:
               owner: example
@@ -272,7 +283,8 @@ def test_production_mode_requires_production_section(tmp_path: Path) -> None:
               state_file: /tmp/production-state.json
             wake:
               wake_file: /tmp/production-wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 
@@ -283,7 +295,8 @@ def test_production_mode_requires_production_section(tmp_path: Path) -> None:
 def test_production_mode_requires_project_name(tmp_path: Path) -> None:
     config_file = tmp_path / "production.yaml"
     config_file.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: production-demo
             github:
               owner: example
@@ -312,7 +325,8 @@ def test_production_mode_requires_project_name(tmp_path: Path) -> None:
               state_file: /tmp/production-state.json
             wake:
               wake_file: /tmp/production-wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
 

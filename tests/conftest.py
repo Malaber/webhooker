@@ -82,6 +82,7 @@ def production_project_config(tmp_path: Path) -> ProjectConfig:
                 "sqlite_path": str(tmp_path / "production" / "app.db"),
                 "backup_dir": str(tmp_path / "production" / "backups"),
                 "backup_keep": 3,
+                "backup_max_age_days": None,
                 "seed_command": [],
             },
             "reconcile": {
@@ -101,7 +102,8 @@ def config_dir(tmp_path: Path) -> Path:
     config_path = tmp_path / "configs"
     config_path.mkdir()
     (config_path / "review-demo.yaml").write_text(
-        textwrap.dedent("""
+        textwrap.dedent(
+            """
             project_id: review-demo
             github:
               owner: example
@@ -131,7 +133,8 @@ def config_dir(tmp_path: Path) -> Path:
               state_file: /tmp/review-state.json
             wake:
               wake_file: /tmp/review-wake
-            """).strip(),
+            """
+        ).strip(),
         encoding="utf-8",
     )
     return config_path

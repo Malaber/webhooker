@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 
 PLACEHOLDER_IMAGE = "python:3.14-alpine"
 PLACEHOLDER_POLL_SECONDS = 5
+BACKUP_TIMESTAMP_FORMAT = "%Y%m%d%H%M%S"
+
+
+class ProductionImageUnavailableError(RuntimeError):
+    def __init__(self, image: str) -> None:
+        super().__init__(f"Production image is not available yet: {image}")
+        self.image = image
 
 
 class Deployer:
@@ -271,7 +278,7 @@ class Deployer:
         self._run(command)
 
     def _pull_image(self, image: str) -> None:
-        logger.info("Pulling review image=%s", image)
+        logger.info("Pulling image=%s", image)
         self._run(
             [self.config.deployment.compose_bin, "pull", image],
             capture_output=True,
@@ -385,7 +392,8 @@ class Deployer:
         pr_url = self._github_pull_request_url(pr.number)
         commit_url = self._github_commit_url(pr.head_sha)
         current_revision = pr.head_sha
-        return textwrap.dedent(f"""\
+        return textwrap.dedent(
+            f"""\
             <!doctype html>
             <html lang="en">
             <head>
@@ -526,7 +534,8 @@ class Deployer:
               </script>
             </body>
             </html>
-            """)
+            """
+        )
 
     def _placeholder_compose_yaml(
         self,
@@ -560,7 +569,8 @@ class Deployer:
         return yaml.safe_dump(compose_doc, sort_keys=False)
 
     def _placeholder_server_script(self, revision: str) -> str:
-        return textwrap.dedent(f"""\
+        return textwrap.dedent(
+            f"""\
             from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
             from pathlib import Path
 
@@ -591,7 +601,8 @@ class Deployer:
 
 
             ThreadingHTTPServer(("0.0.0.0", 8000), PlaceholderHandler).serve_forever()
-            """)
+            """
+        )
 
     def _review_compose_file_for_state(self, deployed: DeployedReview) -> str:
         if deployed.placeholder_active:
@@ -765,6 +776,13 @@ class Deployer:
         sqlite_existed = sqlite_path.exists()
 
         self._ensure_dir(data_dir, "production data directory")
+        try:
+            self._pull_image(image)
+        except subprocess.CalledProcessError as exc:
+            if self._is_missing_review_image(exc):
+                raise ProductionImageUnavailableError(image) from exc
+            raise
+
         if previous is not None:
             self._compose_down(
                 compose_project,
@@ -808,12 +826,36 @@ class Deployer:
         production = self._production_config()
         backup_dir = Path(production.backup_dir)
         self._ensure_dir(backup_dir, "production backup directory")
-        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime(BACKUP_TIMESTAMP_FORMAT)
         backup_path = backup_dir / f"{sqlite_path.stem}-{timestamp}{sqlite_path.suffix}"
         shutil.copy2(sqlite_path, backup_path)
-        backups = sorted(backup_dir.glob(f"{sqlite_path.stem}-*{sqlite_path.suffix}"), reverse=True)
-        for stale_backup in backups[production.backup_keep :]:
-            stale_backup.unlink()
+        backups = sorted(
+            backup_dir.glob(f"{sqlite_path.stem}-*{sqlite_path.suffix}"),
+            reverse=True,
+        )
+
+        if production.backup_keep is not None:
+            for stale_backup in backups[production.backup_keep :]:
+                stale_backup.unlink()
+
+        if production.backup_max_age_days is None:
+            return
+
+        cutoff = datetime.now(UTC).timestamp() - (production.backup_max_age_days * 24 * 60 * 60)
+        for candidate in backups:
+            timestamp_text = candidate.stem.removeprefix(f"{sqlite_path.stem}-")
+            try:
+                created_at = datetime.strptime(timestamp_text, BACKUP_TIMESTAMP_FORMAT).replace(
+                    tzinfo=UTC
+                )
+            except ValueError:
+                logger.warning(
+                    "Skipping backup retention check for unrecognized backup name=%s",
+                    candidate,
+                )
+                continue
+            if created_at.timestamp() < cutoff:
+                candidate.unlink()
 
     def _production_project_name(self) -> str:
         project_name = self.config.deployment.production_project_name
