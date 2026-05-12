@@ -1,6 +1,6 @@
 namespace: malaber
 name: webhooker
-version: 0.3.21
+version: 0.3.22-rc.95
 readme: README.md
 authors:
   - Malaber
