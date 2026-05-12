@@ -148,7 +148,7 @@ jobs:
       source_sha: ${{ needs.prepare-release.outputs.source_sha }}
       release_version: ${{ needs.version.outputs.release_version }}
       git_tag: ${{ needs.version.outputs.git_tag }}
-      prerelease: ${{ needs.version.outputs.prerelease }}
+      prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
       stamp_replacements: >-
         [{"path":"pyproject.toml","pattern":"^version = \"[^\"]+\"$","replacement":"version = \"{version}\""},{"path":"galaxy.yml","pattern":"^version:\\s*[^\\n]+$","replacement":"version: {version}"},{"path":"roles/webhooker/defaults/main.yml","pattern":"^webhooker_collection_version:\\s*\"[^\"]+\"$","replacement":"webhooker_collection_version: \"{version}\""}]
       artifact_name: malaber-webhooker-${{ needs.version.outputs.release_version }}
@@ -175,7 +175,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - name: Promote Docker image
         env:
-          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease == 'true' }}
         run: |
           if [ "$PRERELEASE" = "true" ]; then
             docker buildx imagetools create \
