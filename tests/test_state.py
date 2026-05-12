@@ -67,7 +67,9 @@ def test_non_mapping_review_state_value_is_left_unchanged() -> None:
     assert ProjectState.normalize_review_keys(["not", "a", "dict"]) == ["not", "a", "dict"]
 
 
-def test_invalid_state_json_logs_and_raises(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_invalid_state_json_logs_and_raises(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     state_file = tmp_path / "state.json"
     state_file.write_text('{"project_id":', encoding="utf-8")
 
