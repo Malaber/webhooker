@@ -7,7 +7,9 @@ def test_role_default_image_uses_installed_collection_version() -> None:
     tasks = Path("roles/webhooker/tasks/main.yml").read_text(encoding="utf-8")
 
     assert "webhooker_collection_version" in defaults
-    assert "ghcr.io/malaber/webhooker/webhooker:{{ webhooker_collection_version }}" in defaults
+    assert "webhooker_image_tag" in defaults
+    assert 'webhooker_image_tag: "{{ webhooker_collection_version }}"' in defaults
+    assert "ghcr.io/malaber/webhooker/webhooker:{{ webhooker_image_tag }}" in defaults
     assert ":main" not in defaults
     assert "lookup('ansible.builtin.file'" not in defaults
     assert "Inspect Docker socket" in tasks
@@ -37,9 +39,15 @@ def test_project_and_collection_versions_match() -> None:
         defaults,
         re.MULTILINE,
     )
+    image_tag_match = re.search(
+        r'^webhooker_image_tag:\s*"\{\{ webhooker_collection_version \}\}"$',
+        defaults,
+        re.MULTILINE,
+    )
 
     assert pyproject_match is not None
     assert galaxy_match is not None
     assert defaults_match is not None
+    assert image_tag_match is not None
     assert pyproject_match.group(1) == galaxy_match.group(1).strip()
     assert pyproject_match.group(1) == defaults_match.group(1)
