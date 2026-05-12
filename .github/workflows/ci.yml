@@ -69,20 +69,20 @@ jobs:
           RELEASE_GIT_TAG: ${{ needs.version.outputs.git_tag }}
           IS_PUSH_EVENT: ${{ github.event_name == 'push' }}
         run: |
-          if git diff --quiet; then
-            source_sha="$GITHUB_SHA"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -am "chore: stamp release metadata for ${{ needs.version.outputs.release_version }}"
-            source_sha="$(git rev-parse HEAD)"
-            if [ "$IS_PUSH_EVENT" = "true" ]; then
+          if [ "$IS_PUSH_EVENT" = "true" ]; then
+            if git diff --quiet; then
+              source_sha="$GITHUB_SHA"
+            else
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git commit -am "chore: stamp release metadata for ${{ needs.version.outputs.release_version }}"
+              source_sha="$(git rev-parse HEAD)"
               git push origin "HEAD:refs/heads/release-source/${{ github.run_id }}"
             fi
-          fi
-          if [ "$IS_PUSH_EVENT" = "true" ]; then
             git tag -f "$RELEASE_GIT_TAG" "$source_sha"
             git push origin "refs/tags/$RELEASE_GIT_TAG" --force
+          else
+            source_sha="$GITHUB_SHA"
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
