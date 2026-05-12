@@ -95,6 +95,8 @@ The collection exposes one role:
 
 - `malaber.webhooker.webhooker`
 
+To test an RC Docker image before a matching collection RC is published, set `webhooker_image_tag` (or `webhooker_image`) in your playbook vars, for example `webhooker_image_tag: "0.3.22-rc.5"`.
+
 The reusable role content lives in [`roles/webhooker/`](/Users/daniel/Git/Github.com/Malaber/webhooker/roles/webhooker), and the generic consumer example lives in [`examples/generic/`](/Users/daniel/Git/Github.com/Malaber/webhooker/examples/generic).
 
 ## Deployment modes
