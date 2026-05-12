@@ -14,6 +14,17 @@ def test_empty_state_file_creates_default_state(tmp_path: Path) -> None:
     assert state.production is None
 
 
+def test_blank_state_file_creates_default_state(tmp_path: Path) -> None:
+    state_file = tmp_path / "state.json"
+    state_file.write_text("   \n\t", encoding="utf-8")
+
+    state = load_state(str(state_file), project_id="demo")
+
+    assert state.project_id == "demo"
+    assert state.reviews == {}
+    assert state.production is None
+
+
 def test_saved_state_reloads_correctly(tmp_path: Path) -> None:
     state_file = tmp_path / "state.json"
     original = ProjectState(
