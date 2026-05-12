@@ -7,7 +7,7 @@ webhooker_env_dir: /srv/webhooker/env
 webhooker_state_dir: /srv/webhooker/runtime/state
 webhooker_wake_dir: /srv/webhooker/runtime/wake
 
-webhooker_collection_version: "0.3.22-rc.92"
+webhooker_collection_version: "0.3.22-rc.105"
 webhooker_image_tag: "{{ webhooker_collection_version }}"
 webhooker_image: ghcr.io/malaber/webhooker/webhooker:{{ webhooker_image_tag }}
 webhooker_api_bind_address: 127.0.0.1
