@@ -134,7 +134,7 @@ jobs:
             ${{ needs.version.outputs.prerelease == 'true' && format('{0}:{1}', steps.image.outputs.image, needs.version.outputs.release_version) || '' }}
 
   release-ansible-collection:
-    if: (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v'))
+    if: always() && (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')) && (needs.version.outputs.prerelease == 'true' || needs.test.result == 'success')
     needs:
       - test
       - version
@@ -154,7 +154,7 @@ jobs:
       artifact_name: malaber-webhooker-${{ needs.version.outputs.release_version }}
 
   release:
-    if: (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v'))
+    if: always() && (github.event_name == 'push' && needs.prepare-release.outputs.ready == 'true') && (github.actor != 'github-actions[bot]' || !startsWith(github.event.head_commit.message, 'Release v')) && (needs.version.outputs.prerelease == 'true' || needs.test.result == 'success')
     needs:
       - test
       - version
