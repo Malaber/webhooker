@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from webhooker.models import DeployedReview, ProjectState
 from webhooker.state import load_state, save_state
 
@@ -62,3 +65,13 @@ def test_review_state_string_keys_are_normalized(tmp_path: Path) -> None:
 
 def test_non_mapping_review_state_value_is_left_unchanged() -> None:
     assert ProjectState.normalize_review_keys(["not", "a", "dict"]) == ["not", "a", "dict"]
+
+
+def test_invalid_state_json_logs_and_raises(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    state_file = tmp_path / "state.json"
+    state_file.write_text('{"project_id":', encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        load_state(str(state_file), project_id="demo")
+
+    assert "Failed to parse state file project_id=demo" in caplog.text
