@@ -67,6 +67,7 @@ jobs:
         id: prepare
         env:
           RELEASE_GIT_TAG: ${{ needs.version.outputs.git_tag }}
+          RELEASE_VERSION: ${{ needs.version.outputs.release_version }}
           IS_PUSH_EVENT: ${{ github.event_name == 'push' }}
         run: |
           if [ "$IS_PUSH_EVENT" = "true" ]; then
@@ -81,6 +82,8 @@ jobs:
             fi
             git tag -f "$RELEASE_GIT_TAG" "$source_sha"
             git push origin "refs/tags/$RELEASE_GIT_TAG" --force
+            git tag -f "$RELEASE_VERSION" "$source_sha"
+            git push origin "refs/tags/$RELEASE_VERSION" --force
           else
             source_sha="$GITHUB_SHA"
           fi
