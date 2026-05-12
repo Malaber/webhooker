@@ -53,11 +53,30 @@ jobs:
       ready: ${{ steps.prepare.outputs.ready }}
       source_sha: ${{ steps.prepare.outputs.source_sha }}
     steps:
-      - name: Select release source commit
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Stamp release version into release source commit
+        uses: Malaber/github-workflows/.github/actions/stamp-version@main
+        with:
+          version: ${{ needs.version.outputs.release_version }}
+          replacements: >-
+            [{"path":"pyproject.toml","pattern":"^version = \"[^\"]+\"$","replacement":"version = \"{version}\""},{"path":"galaxy.yml","pattern":"^version:\\s*[^\\n]+$","replacement":"version: {version}"},{"path":"roles/webhooker/defaults/main.yml","pattern":"^webhooker_collection_version:\\s*\"[^\"]+\"$","replacement":"webhooker_collection_version: \"{version}\""}]
+      - name: Commit stamped release source
         id: prepare
         run: |
+          if git diff --quiet; then
+            source_sha="$GITHUB_SHA"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore: stamp release metadata for ${{ needs.version.outputs.release_version }}"
+            source_sha="$(git rev-parse HEAD)"
+            git push origin "HEAD:refs/heads/release-source/${{ github.run_id }}"
+          fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
-          echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
 
   build-docker:
     needs:
