@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from webhooker.deployer import Deployer
+from webhooker.deployer import Deployer, ProductionImageUnavailableError
 from webhooker.github_client import GitHubClient
 from webhooker.models import DeployedProduction, DeployedReview, ProjectConfig, ProjectState
 from webhooker.state import load_state, save_state
@@ -100,9 +100,16 @@ def _reconcile_production_project(
 
     if current is None:
         logger.info("Creating production deployment project_id=%s", config.project_id)
-        state.production = _production_with_fingerprint(
-            deployer.deploy_production(desired_sha, previous=None), desired_fingerprint
-        )
+        try:
+            state.production = _production_with_fingerprint(
+                deployer.deploy_production(desired_sha, previous=None), desired_fingerprint
+            )
+        except ProductionImageUnavailableError:
+            logger.info(
+                "Skipping initial production deployment project_id=%s until image for sha=%s is available",
+                config.project_id,
+                desired_sha,
+            )
         return
 
     if (
@@ -111,9 +118,16 @@ def _reconcile_production_project(
         or not deployer.production_runtime_exists(current)
     ):
         logger.info("Updating production deployment project_id=%s", config.project_id)
-        state.production = _production_with_fingerprint(
-            deployer.deploy_production(desired_sha, previous=current), desired_fingerprint
-        )
+        try:
+            state.production = _production_with_fingerprint(
+                deployer.deploy_production(desired_sha, previous=current), desired_fingerprint
+            )
+        except ProductionImageUnavailableError:
+            logger.info(
+                "Keeping current production deployment project_id=%s until image for sha=%s is available",
+                config.project_id,
+                desired_sha,
+            )
 
 
 def _review_with_fingerprint(review: DeployedReview, fingerprint: str) -> DeployedReview:

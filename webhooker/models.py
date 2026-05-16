@@ -46,7 +46,8 @@ class ProductionConfig(BaseModel):
     data_dir: str
     sqlite_path: str
     backup_dir: str
-    backup_keep: int = 3
+    backup_keep: int | None = 3
+    backup_max_age_days: int | None = None
     seed_command: list[str] = Field(default_factory=list)
 
 

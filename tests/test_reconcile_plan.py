@@ -12,6 +12,7 @@ from webhooker.models import (
     PullRequestInfo,
 )
 from webhooker.state import save_state
+from webhooker.deployer import ProductionImageUnavailableError
 from webhooker.worker import reconcile_project
 
 
@@ -40,6 +41,7 @@ class FakeDeployer:
         self.config_fingerprint = "fingerprint-v1"
         self.missing_review_runtime: set[int] = set()
         self.missing_production_runtime = False
+        self.production_image_unavailable = False
         self.review_deployed: list[int] = []
         self.review_removed: list[int] = []
         self.production_deployed: list[str] = []
@@ -76,6 +78,8 @@ class FakeDeployer:
         sha: str,
         previous: DeployedProduction | None,
     ) -> DeployedProduction:
+        if self.production_image_unavailable:
+            raise ProductionImageUnavailableError(f"ghcr.io/example/repo:sha-{sha[:7]}")
         self.production_deployed.append(sha)
         return DeployedProduction(
             sha=sha,
@@ -425,6 +429,45 @@ def test_missing_production_runtime_causes_redeploy_without_sha_change(
     )
 
     assert deployer.production_deployed == ["same-sha-123456"]
+
+
+def test_missing_production_image_keeps_current_state_unchanged(
+    production_project_config,
+) -> None:
+    current = DeployedProduction(
+        sha="same-sha-123456",
+        compose_project="demo-production",
+        hostname="app.example.test",
+        data_dir="/tmp/demo/production",
+        sqlite_path="/tmp/demo/production/app.db",
+        image="ghcr.io/example/repo:sha-same-sh",
+        branch="main",
+    )
+    save_state(
+        production_project_config.state.state_file,
+        ProjectState(
+            project_id=production_project_config.project_id,
+            production=current,
+        ),
+    )
+    deployer = FakeDeployer(production_project_config)
+    deployer.production_image_unavailable = True
+
+    reconcile_project(
+        production_project_config,
+        github_client_factory=lambda _: FakeProductionGitHubClient(
+            production_project_config,
+            "newsha123456",
+        ),
+        deployer_factory=lambda _: deployer,
+    )
+
+    persisted = ProjectState.model_validate_json(
+        Path(production_project_config.state.state_file).read_text(encoding="utf-8")
+    )
+
+    assert deployer.production_deployed == []
+    assert persisted.production == current
 
 
 def test_production_without_config_raises(review_project_config) -> None:
