@@ -30,6 +30,9 @@ preview:
   base_dir: /srv/example-app/data/reviews
   data_dir_template: "/srv/example-app/data/reviews/pr-{pr}"
   sqlite_path_template: "/srv/example-app/data/reviews/pr-{pr}/app.db"
+  # Webhooker writes .webhooker/review-widget.js inside each data directory.
+  # Serve that directory at /.webhooker and include WEBHOOKER_REVIEW_WIDGET_URL
+  # in review builds to show the floating PR/review-app navigation widget.
   seed_command:
     - docker
     - compose

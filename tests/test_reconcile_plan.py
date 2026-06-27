@@ -23,6 +23,9 @@ class FakeReviewGitHubClient:
     def list_open_pull_requests(self) -> list[PullRequestInfo]:
         return self._prs
 
+    def create_review_deployment_comment(self, pr_number: int, body: str) -> None:
+        self.last_comment = (pr_number, body)
+
 
 class FakeProductionGitHubClient:
     def __init__(self, config: ProjectConfig, sha: str) -> None:

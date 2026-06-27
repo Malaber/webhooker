@@ -9,8 +9,9 @@ import subprocess
 import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from webhooker.models import (
     DeployedProduction,
@@ -195,7 +196,7 @@ class Deployer:
         traefik_router: str,
         traefik_service: str,
     ) -> dict[str, str]:
-        return {
+        env = {
             "APP_IMAGE": image,
             "APP_HOSTNAME": hostname,
             "APP_DATA_DIR": data_dir,
@@ -204,6 +205,14 @@ class Deployer:
             "TRAEFIK_SERVICE": traefik_service,
             "TRAEFIK_CERTRESOLVER": self.config.traefik.certresolver,
         }
+        widget_path = Path(data_dir) / ".webhooker" / "review-widget.js"
+        env.update(
+            {
+                "WEBHOOKER_REVIEW_WIDGET_SCRIPT": str(widget_path),
+                "WEBHOOKER_REVIEW_WIDGET_URL": "/.webhooker/review-widget.js",
+            }
+        )
+        return env
 
     def _compose_up(
         self,
@@ -318,6 +327,73 @@ class Deployer:
 
     def _placeholder_server_path(self, pr: int) -> Path:
         return self._placeholder_root() / f"pr-{pr}" / "server.py"
+
+    def _write_review_widget(self, pr: PullRequestInfo, hostname: str, data_dir: Path) -> Path:
+        widget_dir = data_dir / ".webhooker"
+        self._ensure_dir(widget_dir, "review widget directory")
+        widget_path = widget_dir / "review-widget.js"
+        widget_path.write_text(self._review_widget_script(pr, hostname), encoding="utf-8")
+        return widget_path
+
+    def _review_widget_script(self, pr: PullRequestInfo, hostname: str) -> str:
+        payload = json.dumps(
+            {
+                "appName": self._app_display_name(),
+                "commitUrl": self._github_commit_url(pr.head_sha),
+                "currentPr": pr.number,
+                "currentReviewUrl": f"https://{hostname}/",
+                "pullRequestUrl": self._github_pull_request_url(pr.number),
+                "pullRequestsUrl": (
+                    f"https://github.com/{self.config.github.owner}/"
+                    f"{self.config.github.repo}/pulls"
+                ),
+                "reviewAppsUrl": (
+                    f"https://{self.config.deployment.preview_base_domain}/"
+                    if self.config.deployment.preview_base_domain
+                    else f"https://{hostname}/"
+                ),
+                "sha7": pr.head_sha[:7],
+            },
+            sort_keys=True,
+        )
+        return textwrap.dedent(f"""
+            (() => {{
+              const config = {payload};
+              const storageKey = `webhooker-review-widget-hidden-${{config.currentPr}}`;
+              const hiddenUntil = Number(window.localStorage.getItem(storageKey) || 0);
+              if (hiddenUntil > Date.now()) {{
+                return;
+              }}
+              window.localStorage.removeItem(storageKey);
+
+              const root = document.createElement("aside");
+              root.setAttribute("aria-label", "Webhooker review navigation");
+              root.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;font:14px/1.4 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#0f172a;";
+              root.innerHTML = `
+                <div style="width:260px;border:1px solid rgba(148,163,184,.45);border-radius:16px;background:rgba(255,255,255,.96);box-shadow:0 18px 48px rgba(15,23,42,.22);overflow:hidden;backdrop-filter:blur(10px)">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 12px 8px;background:#0f172a;color:#f8fafc">
+                    <strong>Webhooker PR #${{config.currentPr}}</strong>
+                    <button type="button" data-webhooker-hide style="border:0;border-radius:999px;padding:4px 8px;background:#334155;color:#f8fafc;cursor:pointer">Hide 1h</button>
+                  </div>
+                  <div style="padding:12px;display:grid;gap:8px">
+                    <span style="color:#475569">${{config.appName}} · ${{config.sha7}}</span>
+                    <a href="${{config.pullRequestUrl}}" target="_blank" rel="noreferrer" style="color:#0369a1">Open pull request</a>
+                    <a href="${{config.pullRequestsUrl}}" target="_blank" rel="noreferrer" style="color:#0369a1">Browse pull requests</a>
+                    <a href="${{config.reviewAppsUrl}}" target="_blank" rel="noreferrer" style="color:#0369a1">Browse review apps</a>
+                    <a href="${{config.commitUrl}}" target="_blank" rel="noreferrer" style="color:#0369a1">Open commit</a>
+                  </div>
+                </div>`;
+              root.querySelector("[data-webhooker-hide]")?.addEventListener("click", () => {{
+                window.localStorage.setItem(storageKey, String(Date.now() + 60 * 60 * 1000));
+                root.remove();
+              }});
+              if (document.body) {{
+                document.body.append(root);
+              }} else {{
+                document.addEventListener("DOMContentLoaded", () => document.body.append(root), {{ once: true }});
+              }}
+            }})();
+            """).lstrip()
 
     def _placeholder_service_template(self) -> tuple[dict[str, object], dict[str, object]]:
         compose_path = self._compose_file_path()
@@ -557,7 +633,7 @@ class Deployer:
         if top_level_networks:
             compose_doc["networks"] = top_level_networks
 
-        return yaml.safe_dump(compose_doc, sort_keys=False)
+        return cast(str, yaml.safe_dump(compose_doc, sort_keys=False))
 
     def _placeholder_server_script(self, revision: str) -> str:
         return textwrap.dedent(f"""\
@@ -628,6 +704,7 @@ class Deployer:
         sqlite_exists = Path(sqlite_path).exists()
 
         self._ensure_dir(data_dir, "review data directory")
+        self._write_review_widget(pr, hostname, data_dir)
         extra_env = self._compose_env(
             image=image,
             hostname=hostname,

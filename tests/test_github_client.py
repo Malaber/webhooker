@@ -37,6 +37,23 @@ def test_get_branch_head_sha(production_project_config, monkeypatch: pytest.Monk
     assert github.get_branch_head_sha("main") == "abcdef1234567890"
 
 
+def test_create_review_deployment_comment(
+    review_project_config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/repos/example/repo/issues/7/comments"
+        assert request.headers["Authorization"] == "Bearer test-token"
+        assert request.read() == b'{"body":"review is ready"}'
+        return httpx.Response(201, json={"id": 123})
+
+    monkeypatch.setenv(review_project_config.github.token_env, "test-token")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    github = GitHubClient(review_project_config, client=client)
+
+    github.create_review_deployment_comment(7, "review is ready")
+
+
 def test_get_uses_managed_httpx_client(
     review_project_config,
     monkeypatch: pytest.MonkeyPatch,

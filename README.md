@@ -403,6 +403,10 @@ When a PR opens, synchronizes, or reopens, `webhooker` will:
 - start `docker compose` with a PR-specific project name
 - keep the PR SQLite file between image upgrades
 - run the review seed command only the first time that PR environment is created
+- write `${APP_DATA_DIR}/.webhooker/review-widget.js` and pass its path as `${WEBHOOKER_REVIEW_WIDGET_SCRIPT}` plus the public URL `/.webhooker/review-widget.js` as `${WEBHOOKER_REVIEW_WIDGET_URL}`
+- comment on the pull request with the review app URL after a review deployment is created or updated
+
+To show the floating review navigation widget inside the app, serve `${APP_DATA_DIR}/.webhooker` at `/.webhooker` and include `<script src="/.webhooker/review-widget.js" defer></script>` in review builds. The widget links to the current PR, the repository PR list, the review-app base domain, and the deployed commit. Its **Hide 1h** button stores a browser-local timestamp and automatically resets after one hour.
 
 If the review image tag does not exist yet because app CI is still building it, `webhooker` temporarily serves a small loading page on the PR hostname instead of leaving Traefik with no backend. The worker keeps retrying the real image on each reconcile and swaps the placeholder out as soon as the image can be pulled.
 
