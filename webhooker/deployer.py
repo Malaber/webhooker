@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import textwrap
+from typing import cast
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -276,6 +277,10 @@ class Deployer:
             [self.config.deployment.compose_bin, "pull", image],
             capture_output=True,
         )
+
+    def _remove_image(self, image: str) -> None:
+        logger.info("Removing undeployed image=%s", image)
+        self._run([self.config.deployment.compose_bin, "image", "rm", image])
 
     def _is_missing_review_image(self, exc: subprocess.CalledProcessError) -> bool:
         output = "\n".join(
@@ -557,7 +562,7 @@ class Deployer:
         if top_level_networks:
             compose_doc["networks"] = top_level_networks
 
-        return yaml.safe_dump(compose_doc, sort_keys=False)
+        return cast(str, yaml.safe_dump(compose_doc, sort_keys=False))
 
     def _placeholder_server_script(self, revision: str) -> str:
         return textwrap.dedent(f"""\
@@ -685,8 +690,14 @@ class Deployer:
                 compose_file=self._review_compose_file_for_state(deployed),
             )
         finally:
-            shutil.rmtree(deployed.data_dir, ignore_errors=True)
-            shutil.rmtree(self._placeholder_compose_path(deployed.pr).parent, ignore_errors=True)
+            try:
+                if not deployed.placeholder_active:
+                    self._remove_image(deployed.image)
+            finally:
+                shutil.rmtree(deployed.data_dir, ignore_errors=True)
+                shutil.rmtree(
+                    self._placeholder_compose_path(deployed.pr).parent, ignore_errors=True
+                )
 
     def production_runtime_exists(self, deployed: DeployedProduction) -> bool:
         if not Path(deployed.data_dir).exists():
@@ -779,6 +790,7 @@ class Deployer:
                 ),
             )
             self._backup_sqlite(sqlite_path)
+            self._remove_image(previous.image)
 
         extra_env = self._compose_env(
             image=image,

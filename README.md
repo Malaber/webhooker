@@ -404,6 +404,8 @@ When a PR opens, synchronizes, or reopens, `webhooker` will:
 - keep the PR SQLite file between image upgrades
 - run the review seed command only the first time that PR environment is created
 
+When a PR closes and cleanup is enabled, `webhooker` stops the review Compose project, removes its volumes and data directory, and deletes the undeployed commit image from the host with `docker image rm` so old review images do not accumulate.
+
 If the review image tag does not exist yet because app CI is still building it, `webhooker` temporarily serves a small loading page on the PR hostname instead of leaving Traefik with no backend. The worker keeps retrying the real image on each reconcile and swaps the placeholder out as soon as the image can be pulled.
 
 ## Production deployment example
@@ -441,6 +443,7 @@ When the configured branch moves, `webhooker` will:
 - stop the current Compose project
 - copy the SQLite database into the backup directory
 - keep only the newest three backups
+- delete the previously undeployed commit image from the host with `docker image rm`
 - start the new image with the same long-lived data directory
 
 ## Recommended webhooker installation
