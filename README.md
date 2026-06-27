@@ -15,6 +15,8 @@ The public API only validates GitHub webhooks and wakes reconciliation. The work
 - Reconciles local Docker Compose deployments.
 - Persists deployment state locally.
 - Validates `X-Hub-Signature-256` on the wake endpoint.
+- Serves a small web configuration UI from the API pod for choosing currently desired deployments.
+- Enforces optional RAM budget limits before starting new application deployments.
 - Supports review environments with persistent per-PR SQLite data.
 - Supports production deployments with automatic SQLite backups before roll-forward.
 
@@ -28,6 +30,7 @@ webhooker-api (FastAPI)
     - validate X-Hub-Signature-256
     - verify event type and repository
     - touch wake file
+    - serve UI and write desired-deployments.json
     - return 202 Accepted
 
 systemd timer / manual execution
@@ -36,6 +39,7 @@ systemd timer / manual execution
 webhooker-worker
     - load project configs
     - query GitHub API
+    - read desired-deployments.json
     - compute desired state
     - review mode: reconcile one Compose project per PR
     - production mode: reconcile one Compose project for a branch
@@ -134,6 +138,7 @@ Each managed target gets one YAML file.
 - `traefik`: label and certificate resolver inputs
 - `state`: JSON file path for persisted state
 - `wake`: wake file path touched by the webhook API
+- `resources`: optional environment variable names for RAM budgeting. By default webhooker reads `WEBHOOKER_RAM_BUDGET` and `WEBHOOKER_RAM_PER_APPLICATION`; values are integers in the same unit, usually MiB. When both are set, the worker will not start new apps if `(running apps + new apps) * per-app` would exceed the budget.
 
 ### Review mode sections
 
@@ -509,7 +514,7 @@ services:
     env_file:
       - /srv/example-app/webhooker/env/webhooker.env
     volumes:
-      - /srv/example-app/webhooker/projects:/srv/example-app/webhooker/projects:ro
+      - /srv/example-app/webhooker/projects:/srv/example-app/webhooker/projects
       - /srv/example-app/webhooker/runtime/wake:/srv/example-app/webhooker/runtime/wake
     ports:
       - "127.0.0.1:9100:9100"
@@ -598,6 +603,35 @@ After that:
 - configure the GitHub webhook to call `/github/<project_id>/wake`
 - place your app deployment templates, secrets, and data under `/srv/<app-name>/`
 
+
+### Web configuration UI and desired deployment file
+
+The API container serves a local web UI at `/ui`. Operators can mark a project as present or absent and, for review projects, optionally enter a comma-separated allowlist of PR numbers that should be present. The API writes only one file, `desired-deployments.json`, in the configured project directory; it still does not talk to GitHub, Docker, or Compose. The worker reads that file during reconciliation and applies it together with GitHub state.
+
+Example file:
+
+```json
+{
+  "projects": {
+    "example-review": {"enabled": true, "review_prs": [12, 19]},
+    "example-production": {"enabled": false, "review_prs": null}
+  }
+}
+```
+
+If a project is omitted, webhooker treats it as enabled with all open PRs desired for review projects.
+
+### RAM budget controls
+
+Set these environment variables in both webhooker containers so the UI can show the constraints and the worker can enforce them:
+
+```dotenv
+WEBHOOKER_RAM_BUDGET=4096
+WEBHOOKER_RAM_PER_APPLICATION=512
+```
+
+With those values, webhooker will start at most eight application deployments. Existing deployments may continue running, but new deployments are skipped until enough budget is available.
+
 ## Security model
 
 ### What the webhook is allowed to do
@@ -607,13 +641,14 @@ After that:
 - Filter allowed event types
 - Verify the repository identity
 - Touch a wake file
+- Write the desired deployment selection file used by the worker
 
 ### What the webhook is not allowed to do
 
 - Accept an image URL
 - Accept a compose file path
 - Accept a command to execute
-- Accept a PR number to deploy
+- Talk to GitHub or decide whether a submitted PR number is valid
 - Talk to Docker directly
 
 ### What the worker does

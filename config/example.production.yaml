@@ -37,6 +37,10 @@ reconcile:
   cleanup_closed_prs: false
   redeploy_on_sha_change: true
 
+resources:
+  ram_budget_env: WEBHOOKER_RAM_BUDGET
+  ram_per_application_env: WEBHOOKER_RAM_PER_APPLICATION
+
 traefik:
   enable_labels: true
   certresolver: letsencrypt

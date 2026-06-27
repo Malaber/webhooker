@@ -23,7 +23,9 @@ webhooker_container_uid: "1000"
 webhooker_container_gid: "1000"
 webhooker_worker_group_add: []
 
-webhooker_env: {}
+webhooker_env:
+  WEBHOOKER_RAM_BUDGET: ""
+  WEBHOOKER_RAM_PER_APPLICATION: ""
 webhooker_projects: []
 webhooker_worker_extra_mounts: []
 webhooker_managed_directories: []
