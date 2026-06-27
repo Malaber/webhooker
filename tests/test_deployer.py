@@ -44,9 +44,19 @@ def test_review_deploy_seeds_only_on_first_creation(
 
     assert first.compose_project == "demo-pr-3"
     assert second.sqlite_path == first.sqlite_path
+    widget_path = Path(first.data_dir) / ".webhooker" / "review-widget.js"
+    widget_script = widget_path.read_text(encoding="utf-8")
+    assert "Webhooker review navigation" in widget_script
+    assert "webhooker-review-widget-hidden-${config.currentPr}" in widget_script
+    assert "60 * 60 * 1000" in widget_script
+    assert '"pullRequestUrl": "https://github.com/example/repo/pull/3"' in widget_script
+    assert '"pullRequestsUrl": "https://github.com/example/repo/pulls"' in widget_script
+    assert '"reviewAppsUrl": "https://review.example.test/"' in widget_script
     assert commands[0][0] == ["docker", "pull", "ghcr.io/example/repo:pr-3-abcdef1"]
     assert commands[1][0][:3] == ["docker", "compose", "-p"]
     assert commands[1][1]["APP_IMAGE"] == "ghcr.io/example/repo:pr-3-abcdef1"
+    assert commands[1][1]["WEBHOOKER_REVIEW_WIDGET_SCRIPT"] == str(widget_path)
+    assert commands[1][1]["WEBHOOKER_REVIEW_WIDGET_URL"] == "/.webhooker/review-widget.js"
     assert commands[2][0] == ["echo", "demo-pr-3"]
     assert commands[3][0] == ["docker", "pull", "ghcr.io/example/repo:pr-3-fedcba6"]
     assert commands[4][0][:3] == ["docker", "compose", "-p"]

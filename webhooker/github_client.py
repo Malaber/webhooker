@@ -41,6 +41,12 @@ class GitHubClient:
         payload: dict[str, Any] = response.json()
         return str(payload["commit"]["sha"])
 
+    def create_review_deployment_comment(self, pr_number: int, body: str) -> None:
+        owner = self.config.github.owner
+        repo = self.config.github.repo
+        url = f"{self.base_url}/repos/{owner}/{repo}/issues/{pr_number}/comments"
+        self._post(url, json={"body": body})
+
     def _get(self, url: str, params: dict[str, Any] | None = None) -> httpx.Response:
         if self._client is not None:
             response = self._client.get(
@@ -56,6 +62,27 @@ class GitHubClient:
             response = client.get(
                 url,
                 params=params,
+                headers=self.headers,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response
+
+    def _post(self, url: str, json: dict[str, Any]) -> httpx.Response:
+        if self._client is not None:
+            response = self._client.post(
+                url,
+                json=json,
+                headers=self.headers,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response
+
+        with httpx.Client() as client:
+            response = client.post(
+                url,
+                json=json,
                 headers=self.headers,
                 timeout=30.0,
             )

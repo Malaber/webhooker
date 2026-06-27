@@ -66,6 +66,7 @@ def _reconcile_review_project(
             state.reviews[pr_number] = _review_with_fingerprint(
                 deployer.deploy_review(pr, previous=None), desired_fingerprint
             )
+            _comment_review_deployment(github_client, state.reviews[pr_number])
             continue
 
         if (
@@ -82,6 +83,7 @@ def _reconcile_review_project(
             state.reviews[pr_number] = _review_with_fingerprint(
                 deployer.deploy_review(pr, previous=current), desired_fingerprint
             )
+            _comment_review_deployment(github_client, state.reviews[pr_number])
 
 
 def _reconcile_production_project(
@@ -118,6 +120,19 @@ def _reconcile_production_project(
 
 def _review_with_fingerprint(review: DeployedReview, fingerprint: str) -> DeployedReview:
     return review.model_copy(update={"config_fingerprint": fingerprint})
+
+
+def _comment_review_deployment(github_client: GitHubClient, review: DeployedReview) -> None:
+    body = (
+        "<!-- webhooker-review-deployment -->\n"
+        f"Webhooker review app is available at https://{review.hostname}/.\n\n"
+        "The review app includes a floating Webhooker widget with links back to "
+        "this pull request, other pull requests, and review apps."
+    )
+    try:
+        github_client.create_review_deployment_comment(review.pr, body)
+    except Exception:
+        logger.exception("Failed to comment on review deployment pr=%s", review.pr)
 
 
 def _production_with_fingerprint(
