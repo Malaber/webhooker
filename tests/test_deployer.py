@@ -569,6 +569,7 @@ def test_remove_review_runs_compose_down_and_deletes_data_dir(
     assert recorded[0][0][-3:] == ["down", "-v", "--remove-orphans"]
     assert recorded[0][1]["APP_DATA_DIR"] == str(data_dir)
     assert recorded[0][1]["APP_HOSTNAME"] == "pr-4.review.example.test"
+    assert recorded[1][0] == ["docker", "image", "rm", "ghcr.io/example/repo:pr-4-abcdef0"]
     assert not data_dir.exists()
 
 
@@ -617,7 +618,19 @@ def test_remove_review_uses_placeholder_compose_file_when_placeholder_is_active(
         )
     )
 
-    assert recorded[0][5] == str(placeholder_compose)
+    assert recorded == [
+        [
+            "docker",
+            "compose",
+            "-p",
+            "demo-pr-4",
+            "-f",
+            str(placeholder_compose),
+            "down",
+            "-v",
+            "--remove-orphans",
+        ]
+    ]
     assert not placeholder_dir.exists()
 
 
@@ -770,7 +783,8 @@ def test_production_deploy_backs_up_sqlite_and_keeps_three_versions(
 
     assert commands[0][0][-2:] == ["down", "--remove-orphans"]
     assert commands[0][1]["APP_IMAGE"] == "ghcr.io/example/repo:sha-oldsha1"
-    assert commands[1][0][-3:] == ["up", "-d", "--remove-orphans"]
+    assert commands[1][0] == ["docker", "image", "rm", "ghcr.io/example/repo:sha-oldsha1"]
+    assert commands[2][0][-3:] == ["up", "-d", "--remove-orphans"]
     assert deployed.image == "ghcr.io/example/repo:sha-abcdef1"
     assert len(backups) == 3
 
