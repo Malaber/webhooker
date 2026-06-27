@@ -56,6 +56,11 @@ class ReconcileConfig(BaseModel):
     redeploy_on_sha_change: bool = True
 
 
+class ResourceConfig(BaseModel):
+    ram_budget_env: str = "WEBHOOKER_RAM_BUDGET"
+    ram_per_application_env: str = "WEBHOOKER_RAM_PER_APPLICATION"
+
+
 class TraefikConfig(BaseModel):
     enable_labels: bool = True
     certresolver: str = "letsencrypt"
@@ -77,6 +82,7 @@ class ProjectConfig(BaseModel):
     preview: PreviewConfig | None = None
     production: ProductionConfig | None = None
     reconcile: ReconcileConfig
+    resources: ResourceConfig = Field(default_factory=ResourceConfig)
     traefik: TraefikConfig
     state: StateConfig
     wake: WakeConfig

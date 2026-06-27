@@ -318,3 +318,10 @@ def test_production_mode_requires_project_name(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError):
         load_project_config(config_file)
+
+
+def test_resource_env_names_default(review_project_config) -> None:
+    assert review_project_config.resources.ram_budget_env == "WEBHOOKER_RAM_BUDGET"
+    assert (
+        review_project_config.resources.ram_per_application_env == "WEBHOOKER_RAM_PER_APPLICATION"
+    )

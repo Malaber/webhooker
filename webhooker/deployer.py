@@ -10,7 +10,7 @@ import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from webhooker.models import (
     DeployedProduction,
@@ -557,7 +557,7 @@ class Deployer:
         if top_level_networks:
             compose_doc["networks"] = top_level_networks
 
-        return yaml.safe_dump(compose_doc, sort_keys=False)
+        return str(yaml.safe_dump(compose_doc, sort_keys=False))
 
     def _placeholder_server_script(self, revision: str) -> str:
         return textwrap.dedent(f"""\
@@ -687,6 +687,20 @@ class Deployer:
         finally:
             shutil.rmtree(deployed.data_dir, ignore_errors=True)
             shutil.rmtree(self._placeholder_compose_path(deployed.pr).parent, ignore_errors=True)
+
+    def remove_production(self, deployed: DeployedProduction) -> None:
+        self._compose_down(
+            deployed.compose_project,
+            remove_volumes=False,
+            extra_env=self._compose_env(
+                image=deployed.image,
+                hostname=deployed.hostname,
+                data_dir=deployed.data_dir,
+                sqlite_path=deployed.sqlite_path,
+                traefik_router=deployed.compose_project,
+                traefik_service=deployed.compose_project,
+            ),
+        )
 
     def production_runtime_exists(self, deployed: DeployedProduction) -> bool:
         if not Path(deployed.data_dir).exists():

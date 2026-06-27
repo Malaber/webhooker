@@ -7,6 +7,7 @@ import uvicorn
 
 from webhooker.api import create_app
 from webhooker.config import load_project_configs
+from webhooker.desired import desired_deployments_path, load_desired_deployments
 from webhooker.logging_utils import configure_logging
 from webhooker.worker import reconcile_project
 
@@ -30,11 +31,12 @@ def run_worker() -> None:
 
     configure_logging()
     configs = load_project_configs(args.config_dir)
+    desired = load_desired_deployments(desired_deployments_path(args.config_dir))
     had_error = False
 
     for config in configs:
         try:
-            reconcile_project(config)
+            reconcile_project(config, desired_deployments=desired)
         except Exception as exc:  # pragma: no cover
             had_error = True
             print(f"[ERROR] project={config.project_id}: {exc}", file=sys.stderr)

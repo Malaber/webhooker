@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from webhooker.desired import DesiredDeployments, DesiredProjectSelection
 from webhooker.models import (
     DeployedProduction,
     DeployedReview,
@@ -43,6 +44,7 @@ class FakeDeployer:
         self.review_deployed: list[int] = []
         self.review_removed: list[int] = []
         self.production_deployed: list[str] = []
+        self.production_removed = False
 
     def deployment_fingerprint(self) -> str:
         return self.config_fingerprint
@@ -87,6 +89,10 @@ class FakeDeployer:
             branch="main",
             config_fingerprint=self.deployment_fingerprint(),
         )
+
+    def remove_production(self, deployed: DeployedProduction) -> None:
+        del deployed
+        self.production_removed = True
 
     def production_runtime_exists(self, deployed: DeployedProduction) -> bool:
         return not self.missing_production_runtime
@@ -446,3 +452,94 @@ def test_production_without_config_raises(review_project_config) -> None:
             ),
             deployer_factory=lambda _: FakeDeployer(invalid_config),
         )
+
+
+def test_review_selection_limits_desired_prs(review_project_config) -> None:
+    deployer = FakeDeployer(review_project_config)
+    prs = [
+        PullRequestInfo(number=5, head_sha="abcdef123456", state="open"),
+        PullRequestInfo(number=6, head_sha="fedcba123456", state="open"),
+    ]
+
+    reconcile_project(
+        review_project_config,
+        github_client_factory=lambda _: FakeReviewGitHubClient(review_project_config, prs),
+        deployer_factory=lambda _: deployer,
+        desired_deployments=DesiredDeployments(
+            projects={"review-demo": DesiredProjectSelection(enabled=True, review_prs=[6])}
+        ),
+    )
+
+    assert deployer.review_deployed == [6]
+
+
+def test_review_ram_budget_limits_new_deployments(
+    review_project_config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WEBHOOKER_RAM_BUDGET", "1024")
+    monkeypatch.setenv("WEBHOOKER_RAM_PER_APPLICATION", "512")
+    deployer = FakeDeployer(review_project_config)
+    prs = [
+        PullRequestInfo(number=5, head_sha="abcdef123456", state="open"),
+        PullRequestInfo(number=6, head_sha="fedcba123456", state="open"),
+        PullRequestInfo(number=7, head_sha="111111123456", state="open"),
+    ]
+
+    reconcile_project(
+        review_project_config,
+        github_client_factory=lambda _: FakeReviewGitHubClient(review_project_config, prs),
+        deployer_factory=lambda _: deployer,
+    )
+
+    assert deployer.review_deployed == [5, 6]
+
+
+def test_production_selection_removes_disabled_deployment(production_project_config) -> None:
+    save_state(
+        production_project_config.state.state_file,
+        ProjectState(
+            project_id=production_project_config.project_id,
+            production=DeployedProduction(
+                sha="same-sha-123456",
+                compose_project="demo-production",
+                hostname="app.example.test",
+                data_dir="/tmp/demo/production",
+                sqlite_path="/tmp/demo/production/app.db",
+                image="ghcr.io/example/repo:sha-same-sh",
+                branch="main",
+            ),
+        ),
+    )
+    deployer = FakeDeployer(production_project_config)
+
+    reconcile_project(
+        production_project_config,
+        github_client_factory=lambda _: FakeProductionGitHubClient(
+            production_project_config, "newsha123456"
+        ),
+        deployer_factory=lambda _: deployer,
+        desired_deployments=DesiredDeployments(
+            projects={"production-demo": DesiredProjectSelection(enabled=False)}
+        ),
+    )
+
+    assert deployer.production_removed is True
+    assert deployer.production_deployed == []
+
+
+def test_production_ram_budget_skips_new_deployment(
+    production_project_config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WEBHOOKER_RAM_BUDGET", "256")
+    monkeypatch.setenv("WEBHOOKER_RAM_PER_APPLICATION", "512")
+    deployer = FakeDeployer(production_project_config)
+
+    reconcile_project(
+        production_project_config,
+        github_client_factory=lambda _: FakeProductionGitHubClient(
+            production_project_config, "newsha123456"
+        ),
+        deployer_factory=lambda _: deployer,
+    )
+
+    assert deployer.production_deployed == []

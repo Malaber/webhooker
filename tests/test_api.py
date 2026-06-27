@@ -195,3 +195,36 @@ def test_wake_endpoint_accepts_secret_with_surrounding_whitespace(
     )
 
     assert response.status_code == 202
+
+
+def test_ui_deployment_config_round_trips_to_desired_file(config_dir: Path) -> None:
+    client = TestClient(create_app(str(config_dir)))
+
+    response = client.post(
+        "/ui/deployments",
+        json={"projects": {"review-demo": {"enabled": True, "review_prs": [5, 8]}}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "saved"
+    saved = json.loads((config_dir / "desired-deployments.json").read_text(encoding="utf-8"))
+    assert saved == {"projects": {"review-demo": {"enabled": True, "review_prs": [5, 8]}}}
+
+    get_response = client.get("/ui/deployments")
+
+    assert get_response.status_code == 200
+    assert get_response.json()["desired"] == saved
+
+
+def test_ui_page_lists_resource_constraints(
+    config_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WEBHOOKER_RAM_BUDGET", "2048")
+    monkeypatch.setenv("WEBHOOKER_RAM_PER_APPLICATION", "512")
+    client = TestClient(create_app(str(config_dir)))
+
+    response = client.get("/ui")
+
+    assert response.status_code == 200
+    assert "RAM budget: 2048 / per app: 512" in response.text
+    assert "review-demo" in response.text
